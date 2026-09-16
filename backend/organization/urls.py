@@ -1,8 +1,8 @@
 from django.urls import path
 
-from .views import DepartmentListCreateView, OfficeLocationListCreateView
+from .views import departments, office_locations
 
 urlpatterns = [
-    path("departments/", DepartmentListCreateView.as_view(), name="department-list"),
-    path("locations/", OfficeLocationListCreateView.as_view(), name="location-list"),
+    path("departments/", departments, name="department-list"),
+    path("locations/", office_locations, name="location-list"),
 ]

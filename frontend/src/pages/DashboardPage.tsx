@@ -2,8 +2,12 @@ import { ArrowUpRight, Clock3, UsersRound } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
+import { useAuth } from "../context/AuthContext";
+import InviteMemberDialog from "../components/organization/InviteMemberDialog";
 
 export default function DashboardPage() {
+  const { user } = useAuth();
+  const canInvite = user?.role === "ADMIN" || user?.role === "HR";
   return (
     <div>
       <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
@@ -18,9 +22,12 @@ export default function DashboardPage() {
             Here is a quick look at what is happening across your organization.
           </p>
         </div>
-        <Button variant="outline" className="self-start">
-          View reports <ArrowUpRight size={16} />
-        </Button>
+        <div className="flex flex-wrap gap-3 self-start">
+          <Button variant="outline">
+            View reports <ArrowUpRight size={16} />
+          </Button>
+          {canInvite && <InviteMemberDialog />}
+        </div>
       </div>
       <div className="mt-10 grid gap-4 md:grid-cols-3">
         <Card className="border-0 bg-white">

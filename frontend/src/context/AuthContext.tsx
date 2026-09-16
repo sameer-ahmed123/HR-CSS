@@ -5,11 +5,11 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import client from "../api/client";
+import { authApi } from "../api/auth";
 import type {
   LoginCredentials,
+  LoginResponse,
   RegisterCredentials,
-  TokenResponse,
   User,
 } from "../types";
 
@@ -20,7 +20,10 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   login: (credentials: LoginCredentials) => Promise<void>;
   register: (credentials: RegisterCredentials) => Promise<void>;
-  logout: () => void;
+  acceptInvite: (token: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+  logoutAll: () => Promise<void>;
+  setSession: (response: LoginResponse) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -37,31 +40,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       return;
     }
-    client
-      .get<User>("/auth/me/")
-      .then(({ data }) => setUser(data))
-      .catch(() => logout())
-      .finally(() => setLoading(false));
+    async function loadUser() {
+      try {
+        const { data } = await authApi.me();
+        setUser(data);
+      } catch {
+        await logout();
+      } finally {
+        setLoading(false);
+      }
+    }
+    void loadUser();
   }, [token]);
 
   async function login(credentials: LoginCredentials) {
-    const { data } = await client.post<TokenResponse>(
-      "/auth/token/",
-      credentials,
-    );
+    const { data } = await authApi.login(credentials);
+    setSession(data);
+  }
+
+  function setSession(data: LoginResponse) {
     localStorage.setItem("access_token", data.access);
     localStorage.setItem("refresh_token", data.refresh);
     setToken(data.access);
-    const profile = await client.get<User>("/auth/me/");
-    setUser(profile.data);
+    setUser(data.user);
   }
 
   async function register(credentials: RegisterCredentials) {
-    await client.post<User>("/auth/register/", credentials);
+    await authApi.register(credentials);
     await login({ email: credentials.email, password: credentials.password });
   }
 
-  function logout() {
+  async function acceptInvite(inviteToken: string, password: string) {
+    const { data } = await authApi.acceptInvite(inviteToken, password);
+    localStorage.setItem("access_token", data.access);
+    localStorage.setItem("refresh_token", data.refresh);
+    setToken(data.access);
+    setUser(data.user);
+  }
+
+  async function logout() {
+    const refresh = localStorage.getItem("refresh_token");
+    if (refresh) {
+      try {
+        await authApi.logout(refresh);
+      } catch {}
+    }
+    clearSession();
+  }
+
+  async function logoutAll() {
+    try {
+      await authApi.logoutAll();
+    } catch {}
+    clearSession();
+  }
+
+  function clearSession() {
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
     setUser(null);
@@ -77,7 +111,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: Boolean(user && token),
         login,
         register,
+        acceptInvite,
         logout,
+        logoutAll,
+        setSession,
       }}
     >
       {children}

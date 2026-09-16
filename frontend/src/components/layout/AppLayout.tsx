@@ -5,7 +5,9 @@ import {
   LogOut,
   Menu,
   Settings,
+  ShieldCheck,
   Users,
+  UserRound,
   X,
 } from "lucide-react";
 import { useState } from "react";
@@ -48,6 +50,12 @@ const navigation: {
     label: "Organization",
     path: "/organization",
     icon: Settings,
+    roles: ["ADMIN", "HR"],
+  },
+  {
+    label: "Access Control",
+    path: "/access-control",
+    icon: ShieldCheck,
     roles: ["ADMIN", "HR"],
   },
 ];
@@ -126,6 +134,12 @@ export default function AppLayout() {
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                <DropdownMenuItem asChild>
+                  <Link to="/profile">
+                    <UserRound size={15} />
+                    Profile & security
+                  </Link>
+                </DropdownMenuItem>
                 <DropdownMenuItem onSelect={logout}>
                   <LogOut size={15} />
                   Sign out

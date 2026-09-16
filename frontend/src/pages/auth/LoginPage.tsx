@@ -1,40 +1,41 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
+import axios from "axios";
 import { ArrowRight, LockKeyhole, Mail } from "lucide-react";
+import { useForm } from "react-hook-form";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
+import { Alert } from "../../components/ui/alert";
 
 export default function LoginPage() {
   const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  if (isAuthenticated) return <Navigate to="/" replace />;
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<{ email: string; password: string }>();
+  if (isAuthenticated) return <Navigate to="/home" replace />;
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (!email || !password) {
-      setError("Enter your work email and password.");
-      return;
-    }
+  async function submit(credentials: { email: string; password: string }) {
     setSubmitting(true);
     setError("");
     try {
-      await login({ email, password });
+      await login(credentials);
       navigate(
         (location.state as { from?: { pathname?: string } })?.from?.pathname ??
-          "/",
+          "/home",
         {
           replace: true,
         },
       );
-    } catch {
-      setError("We couldn't sign you in with those details.");
+    } catch (error) {
+      setError(getLoginErrorMessage(error));
     } finally {
       setSubmitting(false);
     }
@@ -74,7 +75,7 @@ export default function LoginPage() {
           <p className="mt-3 text-sm text-ink/55">
             Use your corporate account to continue.
           </p>
-          <form onSubmit={submit} className="mt-10 space-y-5">
+          <form onSubmit={handleSubmit(submit)} className="mt-10 space-y-5">
             <Label className="block">
               Work email
               <div className="mt-2 flex items-center gap-3 border-b border-ink/20 py-3 focus-within:border-coral">
@@ -82,12 +83,22 @@ export default function LoginPage() {
                 <Input
                   className="w-full bg-transparent text-sm outline-none"
                   type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  {...register("email", {
+                    required: "Enter your work email.",
+                    pattern: {
+                      value: /\S+@\S+\.\S+/,
+                      message: "Enter a valid email.",
+                    },
+                  })}
                   placeholder="you@company.com"
                   autoComplete="email"
                 />
               </div>
+              {errors.email && (
+                <span className="mt-1 block text-xs font-normal text-red-700">
+                  {errors.email.message}
+                </span>
+              )}
             </Label>
             <Label className="block">
               Password
@@ -96,18 +107,20 @@ export default function LoginPage() {
                 <Input
                   className="w-full bg-transparent text-sm outline-none"
                   type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  {...register("password", {
+                    required: "Enter your password.",
+                  })}
                   placeholder="Enter your password"
                   autoComplete="current-password"
                 />
               </div>
+              {errors.password && (
+                <span className="mt-1 block text-xs font-normal text-red-700">
+                  {errors.password.message}
+                </span>
+              )}
             </Label>
-            {error && (
-              <p className="text-sm text-red-700" role="alert">
-                {error}
-              </p>
-            )}
+            {error && <Alert tone="error">{error}</Alert>}
             <Button
               type="submit"
               disabled={submitting}
@@ -126,8 +139,28 @@ export default function LoginPage() {
               Create an account
             </Link>
           </p>
+          <p className="mt-3 text-center text-sm">
+            <Link
+              className="text-ink/55 underline decoration-coral underline-offset-4"
+              to="/forgot-password"
+            >
+              Forgot your password?
+            </Link>
+          </p>
         </div>
       </section>
     </main>
   );
+}
+
+function getLoginErrorMessage(error: unknown) {
+  if (!axios.isAxiosError(error))
+    return "We couldn't sign you in with those details.";
+  const data = error.response?.data as Record<string, unknown> | undefined;
+  if (typeof data?.detail === "string") return data.detail;
+  for (const value of Object.values(data ?? {})) {
+    if (Array.isArray(value) && typeof value[0] === "string") return value[0];
+    if (typeof value === "string") return value;
+  }
+  return "We couldn't sign you in with those details.";
 }

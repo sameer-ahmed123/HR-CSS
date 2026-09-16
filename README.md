@@ -24,4 +24,10 @@ npm run dev
 
 The Vite dev server proxies `/api` requests to Django at `http://localhost:8000`. Create an admin account with `python manage.py createsuperuser` to sign in.
 
-Public users can register at `/register`. New self-registered accounts receive the `EMPLOYEE` role. The API endpoint is `POST /api/v1/auth/register/`; admin-created invitations remain available at `POST /api/v1/auth/invite/`.
+Public users can register at `/register`. New self-registered accounts receive the `EMPLOYEE` role. The API endpoint is `POST /api/v1/auth/register/`.
+
+Module 2 authentication endpoints include `POST /api/v1/auth/login/`, `POST /api/v1/auth/logout/`, `POST /api/v1/auth/logout-all/`, `POST /api/v1/auth/invites/`, `POST /api/v1/auth/invites/<user_id>/resend/`, `GET /api/v1/auth/invites/verify/?token=...`, and `POST /api/v1/auth/invites/accept/`. Invitations expire after 48 hours.
+
+### Email delivery
+
+The default development email backend is the console backend, which prints emails in the Django terminal and does not deliver them. To send real invitations, copy `backend/.env.example` to `backend/.env` or set the same environment variables in your shell. Gmail requires 2-Step Verification and a Google App Password; do not use your regular Gmail password. Restart Django after changing email settings.

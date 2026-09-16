@@ -5,6 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
+import { Alert } from "../../components/ui/alert";
 
 export default function RegisterPage() {
   const { register, isAuthenticated } = useAuth();
@@ -20,7 +21,7 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  if (isAuthenticated) return <Navigate to="/" replace />;
+  if (isAuthenticated) return <Navigate to="/home" replace />;
 
   function updateField(field: keyof typeof form, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -44,7 +45,7 @@ export default function RegisterPage() {
     setError("");
     try {
       await register(form);
-      navigate("/", { replace: true });
+      navigate("/home", { replace: true });
     } catch {
       setError(
         "We couldn't create your account. The email may already be registered.",
@@ -136,11 +137,7 @@ export default function RegisterPage() {
               onChange={(value) => updateField("password_confirmation", value)}
               autoComplete="new-password"
             />
-            {error && (
-              <p className="text-sm text-red-700" role="alert">
-                {error}
-              </p>
-            )}
+            {error && <Alert tone="error">{error}</Alert>}
             <Button
               type="submit"
               disabled={submitting}

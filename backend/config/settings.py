@@ -1,9 +1,14 @@
 import os
 from pathlib import Path
 from datetime import timedelta
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-only-change-me")
+load_dotenv(BASE_DIR / ".env")
+SECRET_KEY = os.getenv(
+    "DJANGO_SECRET_KEY",
+    "dev-only-change-me-use-a-32-byte-secret-key",
+)
 DEBUG = os.getenv("DJANGO_DEBUG", "1") == "1"
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS",
                           "localhost,127.0.0.1").split(",")
@@ -17,6 +22,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "rest_framework_simplejwt.token_blacklist",
     "authentication",
     "organization",
 ]
@@ -35,7 +41,7 @@ MIDDLEWARE = [
 ROOT_URLCONF = "config.urls"
 TEMPLATES = [{
     "BACKEND": "django.template.backends.django.DjangoTemplates",
-    "DIRS": [],
+    "DIRS": [BASE_DIR / "templates"],
     "APP_DIRS": True,
     "OPTIONS": {"context_processors": [
         "django.template.context_processors.request",
@@ -73,3 +79,22 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.smtp.EmailBackend"
+    if os.getenv("EMAIL_HOST")
+    else "django.core.mail.backends.console.EmailBackend",
+)
+EMAIL_HOST = os.getenv("EMAIL_HOST", "")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+# Google may display app passwords in groups; SMTP expects the compact value.
+EMAIL_HOST_PASSWORD = "".join(os.getenv("EMAIL_HOST_PASSWORD", "").split())
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "1") == "1"
+EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "0") == "1"
+DEFAULT_FROM_EMAIL = os.getenv(
+    "DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "no-reply@hr-css.local")
+INVITE_URL_BASE = os.getenv(
+    "INVITE_URL_BASE", "http://localhost:5173/accept-invite")
+RESET_URL_BASE = os.getenv(
+    "RESET_URL_BASE", "http://localhost:5173/reset-password")

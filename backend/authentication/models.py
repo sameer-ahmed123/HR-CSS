@@ -2,6 +2,7 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 
 from common.models import TimeStampedModel
+from organization.models import Department
 
 
 class UserManager(BaseUserManager):
@@ -43,6 +44,11 @@ class CustomUser(AbstractUser, TimeStampedModel):
     invited_by = models.ForeignKey(
         "self", null=True, blank=True, on_delete=models.SET_NULL, related_name="invited_users")
     phone_number = models.CharField(max_length=30, blank=True)
+    department = models.ForeignKey(
+        Department, null=True, blank=True, on_delete=models.SET_NULL, related_name="members")
+    failed_login_attempts = models.PositiveSmallIntegerField(default=0)
+    is_locked = models.BooleanField(default=False)
+    locked_at = models.DateTimeField(null=True, blank=True)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
@@ -50,3 +56,45 @@ class CustomUser(AbstractUser, TimeStampedModel):
 
     def __str__(self):
         return self.email
+
+
+class InvitationToken(TimeStampedModel):
+    user = models.OneToOneField(
+        CustomUser, on_delete=models.CASCADE, related_name="invitation")
+    token_hash = models.CharField(max_length=64, unique=True)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def is_valid(self):
+        from django.utils import timezone
+        return self.used_at is None and self.expires_at > timezone.now() and not self.user.is_active
+
+
+class PasswordResetToken(TimeStampedModel):
+    user = models.ForeignKey(
+        CustomUser, on_delete=models.CASCADE, related_name="password_reset_tokens")
+    token_hash = models.CharField(max_length=64, unique=True)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def is_valid(self):
+        from django.utils import timezone
+        return self.used_at is None and self.expires_at > timezone.now()
+
+
+class LoginHistory(models.Model):
+    class Status(models.TextChoices):
+        SUCCESS = "SUCCESS", "Success"
+        FAILED = "FAILED", "Failed"
+
+    user = models.ForeignKey(
+        CustomUser, on_delete=models.CASCADE, related_name="login_history")
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True)
+    status = models.CharField(max_length=10, choices=Status.choices)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-timestamp",)

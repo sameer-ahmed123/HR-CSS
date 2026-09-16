@@ -19,6 +19,7 @@
     "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
+    "react-hook-form": "^7.88.0",
     "react-router-dom": "latest",
     "tailwind-merge": "^3.6.0"
   },
