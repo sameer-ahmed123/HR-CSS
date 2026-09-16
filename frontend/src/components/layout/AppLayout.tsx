@@ -67,7 +67,7 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen bg-surface text-ink">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 border-r border-ink/10 bg-ink px-6 py-7 text-mist lg:block">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 border-r border-ink/10 bg-white px-6 py-7 text-ink lg:block">
         <SidebarContent
           visibleNavigation={visibleNavigation}
           locationPath={location.pathname}
@@ -84,7 +84,7 @@ export default function AppLayout() {
         </SheetContent>
       </Sheet>
       <div className="lg:pl-72">
-        <header className="flex h-20 items-center justify-between border-b border-ink/10 bg-surface px-5 sm:px-10">
+        <header className="flex h-20 items-center justify-between border-b border-ink/10 bg-white/80 px-5 backdrop-blur sm:px-10">
           <button
             className="lg:hidden"
             onClick={() => setMobileOpen(true)}
@@ -98,7 +98,10 @@ export default function AppLayout() {
             <BreadcrumbItem active>{currentPage}</BreadcrumbItem>
           </Breadcrumb>
           <div className="ml-auto flex items-center gap-5">
-            <button className="relative text-ink/55" aria-label="Notifications">
+            <button
+              className="relative rounded-xl p-2 text-ink/55 transition hover:bg-accent"
+              aria-label="Notifications"
+            >
               <Bell size={19} />
               <span className="absolute -right-1 -top-1 h-2 w-2 bg-coral" />
             </button>
@@ -162,7 +165,7 @@ function SidebarContent({
           <X size={20} />
         </button>
       </div>
-      <p className="mt-2 text-xs uppercase tracking-[0.22em] text-mist/45">
+      <p className="mt-2 text-xs uppercase tracking-[0.18em] text-ink/45">
         Corporate support system
       </p>
       <nav className="mt-14 space-y-2">
@@ -171,7 +174,7 @@ function SidebarContent({
             key={path}
             to={path}
             onClick={onNavigate}
-            className={`flex items-center gap-3 px-3 py-3 text-sm transition ${locationPath === path ? "bg-coral text-ink" : "text-mist/65 hover:bg-mist/10 hover:text-mist"}`}
+            className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${locationPath === path ? "bg-mint font-semibold text-ink" : "text-ink/60 hover:bg-surface hover:text-ink"}`}
           >
             <Icon size={18} />
             {label}

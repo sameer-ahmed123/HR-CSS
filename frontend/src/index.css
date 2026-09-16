@@ -1,44 +1,92 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap");
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
   font-family: "DM Sans", sans-serif;
-  color: #12231f;
-  background: #f4f1e9;
+  color: #17324d;
+  background: #f3f8fb;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  --background: hsl(204 43% 97%);
+  --foreground: hsl(211 53% 20%);
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(211 53% 20%);
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(211 53% 20%);
+  --primary: hsl(174 59% 43%);
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(196 45% 91%);
+  --secondary-foreground: hsl(211 53% 20%);
+  --muted: hsl(204 32% 93%);
+  --muted-foreground: hsl(211 20% 45%);
+  --accent: hsl(164 50% 91%);
+  --accent-foreground: hsl(211 53% 20%);
+  --destructive: hsl(0 70% 55%);
+  --destructive-foreground: hsl(0 0% 100%);
+  --border: hsl(204 28% 86%);
+  --input: hsl(204 28% 86%);
+  --ring: hsl(174 59% 43%);
+  --radius: 0.75rem;
 }
+
+.dark {
+  --background: hsl(211 45% 10%);
+  --foreground: hsl(204 43% 97%);
+  --card: hsl(211 42% 14%);
+  --card-foreground: hsl(204 43% 97%);
+  --popover: hsl(211 42% 14%);
+  --popover-foreground: hsl(204 43% 97%);
+  --primary: hsl(174 59% 52%);
+  --primary-foreground: hsl(211 45% 10%);
+  --secondary: hsl(211 30% 24%);
+  --secondary-foreground: hsl(204 43% 97%);
+  --muted: hsl(211 30% 20%);
+  --muted-foreground: hsl(211 20% 65%);
+  --accent: hsl(164 35% 22%);
+  --accent-foreground: hsl(204 43% 97%);
+  --destructive: hsl(0 60% 48%);
+  --destructive-foreground: hsl(204 43% 97%);
+  --border: hsl(211 26% 29%);
+  --input: hsl(211 26% 29%);
+  --ring: hsl(174 59% 52%);
+}
+
 body {
   margin: 0;
   min-width: 320px;
+  background: #f3f8fb;
 }
 button,
 input {
   font: inherit;
 }
 .bg-ink {
-  background-color: #12231f;
+  background-color: #17324d;
 }
 .text-ink {
-  color: #12231f;
+  color: #17324d;
 }
 .bg-surface {
-  background-color: #f4f1e9;
+  background-color: #f3f8fb;
 }
 .bg-mint {
-  background-color: #c8e7d4;
+  background-color: #d8f3ec;
 }
 .text-mist {
-  color: #f6f3ec;
+  color: #f5fbff;
 }
 .bg-coral {
-  background-color: #f47c63;
+  background-color: #2db3a4;
 }
 .text-coral {
-  color: #f47c63;
+  color: #2db3a4;
 }
 .font-display {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Plus Jakarta Sans", sans-serif;
+}
+::selection {
+  background: #bcebe2;
+  color: #17324d;
 }

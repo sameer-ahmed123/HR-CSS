@@ -8,14 +8,14 @@ export default function DashboardPage() {
     <div>
       <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-coral">
-            Monday, 11 September 2026
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-coral">
+            Monday, 11 September 2026 · Your workspace
           </p>
-          <h1 className="mt-2 font-display text-4xl font-bold tracking-tight">
-            Good morning.
+          <h1 className="mt-2 font-display text-4xl font-bold tracking-tight sm:text-5xl">
+            Good morning, team.
           </h1>
-          <p className="mt-2 text-ink/55">
-            Here is the pulse of your organization.
+          <p className="mt-3 text-ink/55">
+            Here is a quick look at what is happening across your organization.
           </p>
         </div>
         <Button variant="outline" className="self-start">
@@ -23,12 +23,14 @@ export default function DashboardPage() {
         </Button>
       </div>
       <div className="mt-10 grid gap-4 md:grid-cols-3">
-        <Card className="border-0 bg-ink text-mist">
+        <Card className="border-0 bg-white">
           <CardContent>
-            <UsersRound className="text-coral" size={22} />
-            <p className="mt-10 text-sm text-mist/55">Active people</p>
+            <div className="flex items-center justify-between">
+              <UsersRound className="text-coral" size={22} />
+              <Badge className="rounded-full bg-mint text-ink">Live</Badge>
+            </div>
+            <p className="mt-10 text-sm text-ink/55">Active people</p>
             <p className="mt-1 font-display text-4xl font-bold">248</p>
-            <Badge className="mt-4 bg-coral text-ink">Live</Badge>
           </CardContent>
         </Card>
         <Card className="border-0 bg-white">
@@ -36,12 +38,14 @@ export default function DashboardPage() {
             <Clock3 className="text-coral" size={22} />
             <p className="mt-10 text-sm text-ink/55">Pending requests</p>
             <p className="mt-1 font-display text-4xl font-bold">12</p>
-            <Badge className="mt-4 bg-surface text-ink/55">Needs review</Badge>
+            <Badge className="mt-4 rounded-full bg-surface text-ink/55">
+              Needs review
+            </Badge>
           </CardContent>
         </Card>
         <Card className="border-0 bg-mint">
           <CardContent>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-ink/55">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-ink/55">
               Organization health
             </p>
             <p className="mt-9 font-display text-4xl font-bold">

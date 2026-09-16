@@ -55,15 +55,15 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="grid min-h-screen bg-ink text-mist lg:grid-cols-[1.1fr_0.9fr]">
-      <section className="relative hidden overflow-hidden p-12 lg:flex lg:flex-col lg:justify-between">
-        <div className="absolute -right-24 -top-24 h-96 w-96 border-[70px] border-coral/80" />
+    <main className="grid min-h-screen bg-surface text-ink lg:grid-cols-[1.05fr_0.95fr]">
+      <section className="relative hidden overflow-hidden bg-ink p-12 text-mist lg:flex lg:flex-col lg:justify-between">
+        <div className="absolute -right-24 -top-24 h-96 w-96 rounded-full border-[70px] border-coral/30" />
         <div className="relative">
           <div className="font-display text-2xl font-bold">
             hr<span className="text-coral">.</span>css
           </div>
-          <p className="mt-28 max-w-lg font-display text-6xl font-medium leading-[0.98] tracking-tight">
-            Start your <span className="text-coral">next chapter.</span>
+          <p className="mt-28 max-w-lg font-display text-6xl font-bold leading-[1.02] tracking-tight">
+            Your people, your <span className="text-coral">place.</span>
           </p>
         </div>
         <div className="relative flex justify-between text-xs uppercase tracking-[0.2em] text-mist/40">
@@ -71,14 +71,14 @@ export default function RegisterPage() {
           <span>Phase 01</span>
         </div>
       </section>
-      <section className="flex items-center justify-center bg-surface px-6 py-10 text-ink sm:px-12">
-        <div className="w-full max-w-md">
+      <section className="flex items-center justify-center bg-white px-6 py-10 text-ink sm:px-12">
+        <div className="w-full max-w-md rounded-3xl border border-ink/10 bg-white p-2 sm:p-6">
           <div className="mb-10 lg:hidden">
             <div className="font-display text-2xl font-bold">
               hr<span className="text-coral">.</span>css
             </div>
           </div>
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-coral">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-coral">
             Create your account
           </p>
           <h1 className="mt-3 font-display text-4xl font-bold tracking-tight">

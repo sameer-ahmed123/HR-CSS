@@ -5,7 +5,12 @@ export function Card({
   className,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("border border-ink/10", className)} {...props} />;
+  return (
+    <div
+      className={cn("rounded-2xl border border-ink/10 shadow-sm", className)}
+      {...props}
+    />
+  );
 }
 export function CardContent({
   className,

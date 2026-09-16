@@ -6,7 +6,10 @@ export const Avatar = ({
   ...props
 }: AvatarPrimitive.AvatarProps) => (
   <AvatarPrimitive.Root
-    className={cn("relative flex h-9 w-9 shrink-0 overflow-hidden", className)}
+    className={cn(
+      "relative flex h-9 w-9 shrink-0 overflow-hidden rounded-xl",
+      className,
+    )}
     {...props}
   />
 );
