@@ -31,3 +31,71 @@ export interface LoginHistory { id: number; ip_address: string | null; user_agen
 export interface SentInvite { user_id: number; email: string; role: UserRole; is_active: boolean; status: "Pending" | "Activated"; created_at: string; }
 export interface LockedUser { id: number; email: string; first_name: string; last_name: string; role: UserRole; failed_login_attempts: number; locked_at: string | null; }
 export interface OrganizationUser { id: number; email: string; first_name: string; last_name: string; role: UserRole; department_name: string | null; is_active: boolean; created_at: string; }
+export type HiringRequestUrgency = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+export type HiringRequestStatus = "DRAFT" | "PENDING" | "APPROVED" | "REJECTED" | "MORE_INFO";
+export type JobStatus = "DRAFT" | "PUBLISHED" | "CLOSED";
+export type ApplicationStage = "NEW" | "REVIEWED" | "SHORTLISTED" | "TEST_SENT" | "INTERVIEW" | "OFFER" | "HIRED" | "REJECTED";
+
+export interface HiringRequestInput {
+  request_title: string;
+  department: number;
+  headcount: number;
+  urgency: HiringRequestUrgency;
+}
+
+export interface HiringRequest extends HiringRequestInput {
+  id: number;
+  requested_by: number;
+  seniority: string;
+  budget: string | null;
+  reason: string;
+  required_experience: string;
+  required_qualifications: string;
+  status: HiringRequestStatus;
+  rejection_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RecruitmentOpenJob {
+  id: number;
+  job_title: string;
+  department_name: string;
+  status: JobStatus;
+  cv_score_threshold: number;
+  applicant_count: number;
+  created_at: string;
+}
+
+export interface RecruitmentPendingRequest {
+  id: number;
+  request_title: string;
+  department_name: string;
+  requested_by_name: string;
+  headcount: number;
+  urgency: HiringRequestUrgency;
+  status: HiringRequestStatus;
+  created_at: string;
+}
+
+export interface PriorityApplication {
+  id: number;
+  candidate_name: string;
+  candidate_email: string;
+  job_title: string;
+  stage: ApplicationStage;
+  ats_score: number;
+  is_priority: boolean;
+  created_at: string;
+}
+
+export interface RecruitmentOverview {
+  total_open_jobs: number;
+  pending_hiring_requests_count: number;
+  new_applications_this_week: number;
+  emails_sent_this_week: number;
+  open_jobs: RecruitmentOpenJob[];
+  pending_hiring_requests: RecruitmentPendingRequest[];
+  priority_candidates: PriorityApplication[];
+  pipeline_funnel: Partial<Record<ApplicationStage, number>>;
+}

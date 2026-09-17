@@ -6,16 +6,23 @@ class HiringRequesSerializer(serializers.ModelSerializer):
     class Meta:
         model = HiringRequest
         fields = [
+            'id',
             'request_title',
             'department',
             'headcount',
             'urgency',
+            'status',
+            'created_at',
+            'updated_at',
         ]
+        read_only_fields = ['id', 'status', 'created_at', 'updated_at']
+
 
 class HiringRequesDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = HiringRequest
         fields = "__all__"
+
 
 class HiringRequestOverviewSerializer(serializers.ModelSerializer):
     department_name = serializers.CharField(

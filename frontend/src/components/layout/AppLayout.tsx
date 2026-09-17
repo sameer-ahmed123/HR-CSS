@@ -1,5 +1,6 @@
 import {
   Bell,
+  BriefcaseBusiness,
   ChevronDown,
   LayoutDashboard,
   LogOut,
@@ -57,6 +58,18 @@ const navigation: {
     path: "/access-control",
     icon: ShieldCheck,
     roles: ["ADMIN", "HR"],
+  },
+  {
+    label: "Recruitment",
+    path: "/recruitment",
+    icon: BriefcaseBusiness,
+    roles: ["ADMIN", "HR", "TEAM_LEAD"],
+  },
+  {
+    label: "Hiring Requests",
+    path: "/recruitment/requests",
+    icon: BriefcaseBusiness,
+    roles: ["TEAM_LEAD"],
   },
 ];
 

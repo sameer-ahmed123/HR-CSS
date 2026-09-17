@@ -13,7 +13,8 @@ import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import PeoplePage from "./pages/PeoplePage";
 import AccessControlPage from "./pages/AccessControlPage";
-
+import RecruitmentOverviewPage from "./pages/RecruitmentOverviewPage";
+import HiringRequestsPage from "./pages/HiringRequestsPage";
 
 export default function App() {
   return (
@@ -34,6 +35,22 @@ export default function App() {
               <Route path="people" element={<PeoplePage />} />
               <Route element={<ProtectedRoute roles={["ADMIN", "HR"]} />}>
                 <Route path="access-control" element={<AccessControlPage />} />
+              </Route>
+              <Route
+                element={
+                  <ProtectedRoute roles={["ADMIN", "HR", "TEAM_LEAD"]} />
+                }
+              >
+                <Route
+                  path="recruitment"
+                  element={<RecruitmentOverviewPage />}
+                />
+              </Route>
+              <Route element={<ProtectedRoute roles={["TEAM_LEAD"]} />}>
+                <Route
+                  path="recruitment/requests"
+                  element={<HiringRequestsPage />}
+                />
               </Route>
               <Route path="organization" element={<DashboardPage />} />
             </Route>
