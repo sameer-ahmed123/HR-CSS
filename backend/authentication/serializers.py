@@ -141,7 +141,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         model = CustomUser
         fields = ("id", "email", "first_name", "last_name",
                   "role", "phone_number", "department", "department_name", "is_active", "created_at")
-        read_only_fields = ("id", "email", "role", "is_active", "created_at")
+        read_only_fields = ("id", "email", "role", "is_active",'department', "created_at")
     department_name = serializers.CharField(
         source="department.name", read_only=True, allow_null=True)
 

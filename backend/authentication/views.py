@@ -52,6 +52,11 @@ def invalidate_user_tokens(user):
         BlacklistedToken.objects.get_or_create(token=outstanding)
 
 
+"""
+AUTHENTICATION VIEWS
+"""
+
+
 @api_view(["POST"])
 @permission_classes([permissions.AllowAny])
 def token_refresh(request):
@@ -130,6 +135,11 @@ def logout_all(request):
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+"""
+USER PROFILE VIEWS
+"""
+
+
 @api_view(["GET", "PATCH"])
 @permission_classes([permissions.IsAuthenticated])
 def me(request):
@@ -141,11 +151,20 @@ def me(request):
     return Response(UserProfileSerializer(request.user).data)
 
 
+"""
+Invitation and Password Reset Views
+"""
+
+
 @api_view(["POST"])
 @permission_classes([IsAdminOrHR])
 def create_invite(request):
     serializer = InviteCreateSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
+    requested_role = serializer.validated_data['role']
+    if requested_role == CustomUser.Role.ADMIN and request.user.role != CustomUser.Role.ADMIN:
+        return Response({"detail": "HR users cannot invite administrators."},
+                        status=status.HTTP_403_FORBIDDEN,)
     with transaction.atomic():
         user = serializer.save(invited_by=request.user, is_active=False)
         user.set_unusable_password()
@@ -245,6 +264,11 @@ def password_change(request):
     request.user.save(update_fields=["password", "updated_at"])
     invalidate_user_tokens(request.user)
     return Response({"detail": "Password changed successfully."})
+
+
+"""
+Access Control Views
+"""
 
 
 @api_view(["POST"])
