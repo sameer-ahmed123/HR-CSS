@@ -66,6 +66,12 @@ const navigation: {
     roles: ["ADMIN", "HR", "TEAM_LEAD"],
   },
   {
+    label: "Job Postings",
+    path: "/recruitment/jobs",
+    icon: BriefcaseBusiness,
+    roles: ["ADMIN", "HR", "TEAM_LEAD"],
+  },
+  {
     label: "Hiring Requests",
     path: "/recruitment/requests",
     icon: BriefcaseBusiness,

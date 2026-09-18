@@ -5,6 +5,12 @@ import { Alert } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "../components/ui/dialog";
 import type { HiringRequest } from "../types";
 
 export default function HiringRequestReviewPage() {
@@ -15,6 +21,7 @@ export default function HiringRequestReviewPage() {
   const [rejectionReasons, setRejectionReasons] = useState<
     Record<number, string>
   >({});
+  const [approvalPrompt, setApprovalPrompt] = useState<number | null>(null);
 
   useEffect(() => {
     async function loadRequests() {
@@ -33,12 +40,14 @@ export default function HiringRequestReviewPage() {
   async function updateStatus(
     id: number,
     status: "APPROVED" | "REJECTED" | "MORE_INFO",
+    createJobPosting = false,
   ) {
     const rejectionReason = rejectionReasons[id]?.trim();
     if (status === "REJECTED" && !rejectionReason) {
       setError("A rejection reason is required before rejecting a request.");
       return;
     }
+
     setWorkingId(id);
     setError("");
     try {
@@ -46,6 +55,7 @@ export default function HiringRequestReviewPage() {
         id,
         status,
         rejectionReason,
+        createJobPosting,
       );
       setRequests((current) =>
         current.map((request) => (request.id === id ? data : request)),
@@ -115,6 +125,7 @@ export default function HiringRequestReviewPage() {
                       [request.id]: value,
                     }))
                   }
+                  onApprove={() => setApprovalPrompt(request.id)}
                   onStatusChange={(status) =>
                     void updateStatus(request.id, status)
                   }
@@ -124,6 +135,43 @@ export default function HiringRequestReviewPage() {
           </div>
         </section>
       )}
+
+      <Dialog
+        open={approvalPrompt !== null}
+        onOpenChange={(open) => {
+          if (!open) setApprovalPrompt(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogTitle className="font-display text-2xl font-bold">
+            Create a job posting?
+          </DialogTitle>
+          <DialogDescription className="mt-3 text-sm leading-6 text-ink/60">
+            This approved request will be turned into a draft job posting and
+            added to the job postings list for HR to publish later.
+          </DialogDescription>
+          <div className="mt-6 flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setApprovalPrompt(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                if (approvalPrompt !== null) {
+                  void updateStatus(approvalPrompt, "APPROVED", true);
+                  setApprovalPrompt(null);
+                }
+              }}
+            >
+              Create posting
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -133,12 +181,14 @@ function RequestCard({
   rejectionReason,
   working,
   onRejectionReasonChange,
+  onApprove,
   onStatusChange,
 }: {
   request: HiringRequest;
   rejectionReason: string;
   working: boolean;
   onRejectionReasonChange: (value: string) => void;
+  onApprove: () => void;
   onStatusChange: (status: "APPROVED" | "REJECTED" | "MORE_INFO") => void;
 }) {
   return (
@@ -196,11 +246,7 @@ function RequestCard({
             />
           </label>
           <div className="mt-4 grid gap-3 sm:flex sm:flex-wrap">
-            <Button
-              type="button"
-              disabled={working}
-              onClick={() => onStatusChange("APPROVED")}
-            >
+            <Button type="button" disabled={working} onClick={onApprove}>
               <Check size={16} /> Approve
             </Button>
             <Button

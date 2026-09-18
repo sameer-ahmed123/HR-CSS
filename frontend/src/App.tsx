@@ -16,6 +16,7 @@ import AccessControlPage from "./pages/AccessControlPage";
 import RecruitmentOverviewPage from "./pages/RecruitmentOverviewPage";
 import HiringRequestsPage from "./pages/HiringRequestsPage";
 import HiringRequestReviewPage from "./pages/HiringRequestReviewPage";
+import JobPostingsPage from "./pages/JobPostingsPage";
 
 export default function App() {
   return (
@@ -46,6 +47,7 @@ export default function App() {
                   path="recruitment"
                   element={<RecruitmentOverviewPage />}
                 />
+                <Route path="recruitment/jobs" element={<JobPostingsPage />} />
               </Route>
               <Route element={<ProtectedRoute roles={["TEAM_LEAD"]} />}>
                 <Route

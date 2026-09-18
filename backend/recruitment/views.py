@@ -6,13 +6,46 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from common.permissions import HasRole, IsAdminOrHR
-from recruitment.serializers import HiringRequesDetailSerializer, RecruitmentOverviewSerializer, HiringRequesSerializer
+from recruitment.serializers import HiringRequesDetailSerializer, JobPostingSerializer, RecruitmentOverviewSerializer, HiringRequesSerializer
 from recruitment.models import JobPosting, Application, HiringRequest, CandidateEmailLog
 # Create your views here.
 
 import datetime
 from django.utils import timezone
 from django.db.models import Count, Q
+
+
+def _normalize_bool(value):
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _create_job_posting_for_hiring_request(hiring_request):
+    existing_posting = hiring_request.job_postings.first()
+    if existing_posting:
+        return existing_posting
+
+    job_description = (
+        f"{hiring_request.reason}\n\n"
+        f"Seniority: {hiring_request.seniority}\n"
+        f"Required experience: {hiring_request.required_experience}\n"
+        f"Required qualifications: {hiring_request.required_qualifications}"
+    )
+
+    return JobPosting.objects.create(
+        hiring_request=hiring_request,
+        department=hiring_request.department,
+        job_title=hiring_request.request_title,
+        job_description=job_description,
+        required_skills=hiring_request.required_qualifications,
+        required_experience=hiring_request.required_experience,
+        closing_date=None,
+        cv_score_threshold=70,
+        status=JobPosting.JobStatus.DRAFT,
+    )
 
 
 @api_view(["GET"])
@@ -130,6 +163,8 @@ def hiring_request_hr_action(request, pk):
 
     status = request.data.get("status")
     rejection_reason = request.data.get("rejection_reason", "").strip()
+    create_job_posting = _normalize_bool(
+        request.data.get("create_job_posting", False))
 
     allowed_statuses = [
         HiringRequest.RequestStatus.APPROVED,
@@ -156,5 +191,94 @@ def hiring_request_hr_action(request, pk):
         if status == HiringRequest.RequestStatus.REJECTED else ["status"]
     )
 
+    if status == HiringRequest.RequestStatus.APPROVED and create_job_posting:
+        job_posting = _create_job_posting_for_hiring_request(hiring_request)
+        payload = HiringRequesDetailSerializer(hiring_request).data
+        payload["job_posting_created"] = True
+        payload["job_posting_id"] = job_posting.id
+        return Response(payload, status=200)
+
     serializer = HiringRequesDetailSerializer(hiring_request)
     return Response(serializer.data, status=200)
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR", "TEAM_LEAD"])])
+def job_posting_list_create(request):
+    if request.method == "GET":
+        queryset = JobPosting.objects.select_related("department").all()
+
+        # Filtering parameters
+        status_param = request.query_params.get("status")
+        dept_param = request.query_params.get("department")
+
+        # Team Leads can only see jobs in their department unless filtered
+        if request.user.role == "TEAM_LEAD":
+            queryset = queryset.filter(department=request.user.department)
+
+        if status_param:
+            queryset = queryset.filter(status=status_param)
+        if dept_param:
+            queryset = queryset.filter(department_id=dept_param)
+
+        serializer = JobPostingSerializer(queryset, many=True)
+        return Response(serializer.data)
+
+    elif request.method == "POST":
+        if request.user.role not in ["ADMIN", "HR"]:
+            return Response({"detail": "Only HR and Admins can create job postings."}, status=403)
+
+        serializer = JobPostingSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=201)
+        return Response(serializer.errors, status=400)
+
+
+@api_view(["GET", "PUT", "PATCH", "DELETE"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR"])])
+def job_posting_detail(request, pk):
+    job = get_object_or_404(JobPosting, id=pk)
+
+    if request.method == "GET":
+        serializer = JobPostingSerializer(job)
+        return Response(serializer.data)
+
+    elif request.method in ["PUT", "PATCH"]:
+        serializer = JobPostingSerializer(
+            job, data=request.data, partial=(request.method == "PATCH"))
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=400)
+
+    elif request.method == "DELETE":
+        # Delete allowed only if it is still in DRAFT
+        if job.status != JobPosting.JobStatus.DRAFT:
+            return Response(
+                {"error": "Only draft job postings can be deleted. Close or archive published jobs instead."},
+                status=400
+            )
+        job.delete()
+        return Response(status=204)
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR"])])
+def job_posting_status_change(request, pk):
+    job = get_object_or_404(JobPosting, id=pk)
+    target_status = request.data.get("status")
+
+    valid_statuses = [
+        JobPosting.JobStatus.PUBLISHED,
+        JobPosting.JobStatus.CLOSED,
+        JobPosting.JobStatus.DRAFT,
+    ]
+
+    if target_status not in valid_statuses:
+        return Response({"error": f"Invalid status. Choose from {valid_statuses}"}, status=400)
+
+    job.status = target_status
+    job.save(update_fields=["status", "updated_at"])
+
+    return Response(JobPostingSerializer(job).data, status=200)

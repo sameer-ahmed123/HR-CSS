@@ -104,3 +104,26 @@ export interface RecruitmentOverview {
   priority_candidates: PriorityApplication[];
   pipeline_funnel: Partial<Record<ApplicationStage, number>>;
 }
+
+export interface JobPostingInput {
+  job_title: string;
+  job_description: string;
+  department: number;
+  hiring_request: number | null;
+  required_skills: string;
+  required_experience: string;
+  closing_date: string | null;
+  cv_score_threshold: number;
+  status?: JobStatus;
+  linkedin_post_id?: string | null;
+  linkedin_post_url?: string | null;
+}
+
+export interface JobPosting extends JobPostingInput {
+  id: number;
+  department_name: string;
+  applicant_count: number;
+  created_at: string;
+  updated_at: string;
+  status: JobStatus;
+}

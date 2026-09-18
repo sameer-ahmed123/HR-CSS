@@ -90,8 +90,50 @@ class PriorityApplicationSerializer(serializers.ModelSerializer):
 
 
 # ==========================================
+# JOBPOSTIN RELATED SERIALIZERS
+# =========================================
+
+
+class JobPostingSerializer(serializers.ModelSerializer):
+    department_name = serializers.CharField(
+        source="department.name", read_only=True)
+    applicant_count = serializers.IntegerField(
+        source="applications.count", read_only=True)
+
+    class Meta:
+        model = JobPosting
+        fields = [
+            "id",
+            "job_title",
+            "job_description",
+            "department",
+            "department_name",
+            "hiring_request",
+            "status",
+            "required_skills",
+            "required_experience",
+            "closing_date",
+            "cv_score_threshold",
+            "linkedin_post_id",
+            "linkedin_post_url",
+            "applicant_count",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["created_at", "updated_at", "applicant_count"]
+
+    def validate_hiring_request(self, value):
+        """Ensure hiring request is APPROVED before linking to a Job Posting."""
+        if value and value.status != HiringRequest.RequestStatus.APPROVED:
+            raise serializers.ValidationError(
+                "Cannot link a job posting to an unapproved hiring request."
+            )
+        return value
+
+# ==========================================
 # DASHBOARD OVERVIEW SERIALIZER
 # ==========================================
+
 
 class RecruitmentOverviewSerializer(serializers.Serializer):
     # Summary Metrics
