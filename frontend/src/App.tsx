@@ -15,6 +15,7 @@ import PeoplePage from "./pages/PeoplePage";
 import AccessControlPage from "./pages/AccessControlPage";
 import RecruitmentOverviewPage from "./pages/RecruitmentOverviewPage";
 import HiringRequestsPage from "./pages/HiringRequestsPage";
+import HiringRequestReviewPage from "./pages/HiringRequestReviewPage";
 
 export default function App() {
   return (
@@ -50,6 +51,12 @@ export default function App() {
                 <Route
                   path="recruitment/requests"
                   element={<HiringRequestsPage />}
+                />
+              </Route>
+              <Route element={<ProtectedRoute roles={["ADMIN", "HR"]} />}>
+                <Route
+                  path="recruitment/review"
+                  element={<HiringRequestReviewPage />}
                 />
               </Route>
               <Route path="organization" element={<DashboardPage />} />

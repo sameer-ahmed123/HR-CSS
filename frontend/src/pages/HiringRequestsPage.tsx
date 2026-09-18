@@ -32,7 +32,12 @@ export default function HiringRequestsPage() {
     request_title: "",
     department: 0,
     headcount: 1,
+    seniority: "",
+    budget: "",
+    reason: "",
     urgency: "MEDIUM",
+    required_experience: "",
+    required_qualifications: "",
   });
 
   useEffect(() => {
@@ -59,9 +64,13 @@ export default function HiringRequestsPage() {
     if (
       !form.request_title.trim() ||
       form.department < 1 ||
-      form.headcount < 1
+      form.headcount < 1 ||
+      !form.seniority.trim() ||
+      !form.reason.trim() ||
+      !form.required_experience.trim() ||
+      !form.required_qualifications.trim()
     ) {
-      setError("Add a title, department, and headcount before submitting.");
+      setError("Complete the required fields before submitting this request.");
       return;
     }
     setSaving(true);
@@ -70,13 +79,19 @@ export default function HiringRequestsPage() {
       const { data } = await recruitmentApi.createHiringRequest({
         ...form,
         request_title: form.request_title.trim(),
+        budget: form.budget?.trim() || null,
       });
       setRequests((current) => [data, ...current]);
       setForm({
         request_title: "",
         department: 0,
         headcount: 1,
+        seniority: "",
+        budget: "",
+        reason: "",
         urgency: "MEDIUM",
+        required_experience: "",
+        required_qualifications: "",
       });
     } catch {
       setError("We could not submit this hiring request.");
@@ -114,10 +129,10 @@ export default function HiringRequestsPage() {
         </Alert>
       )}
 
-      <div className="mt-10 grid gap-8 xl:grid-cols-[0.8fr_1.2fr]">
-        <Card className="border-0 bg-ink text-mist">
+      <div className="mt-10 grid min-w-0 gap-8 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <Card className="min-w-0 border-0 bg-ink text-mist">
           <CardContent>
-            <div className="flex items-center gap-3">
+            <div className="flex items-start gap-3">
               <span className="grid h-10 w-10 place-items-center bg-coral text-ink">
                 <Plus size={19} />
               </span>
@@ -128,11 +143,15 @@ export default function HiringRequestsPage() {
                 <h2 className="mt-1 font-display text-2xl font-bold">
                   Build the case
                 </h2>
+                <p className="mt-1 text-sm leading-5 text-mist/55">
+                  Required fields are marked with an asterisk.
+                </p>
               </div>
             </div>
-            <form onSubmit={submit} className="mt-8 space-y-5">
-              <Field label="Request title">
+            <form onSubmit={submit} className="mt-8 space-y-6">
+              <Field label="Request title" required>
                 <Input
+                  required
                   value={form.request_title}
                   onChange={(event) =>
                     setForm({ ...form, request_title: event.target.value })
@@ -141,8 +160,9 @@ export default function HiringRequestsPage() {
                   className="border-white/15 bg-white/10 text-mist placeholder:text-mist/40"
                 />
               </Field>
-              <Field label="Department">
+              <Field label="Department" required>
                 <select
+                  required
                   value={form.department || ""}
                   onChange={(event) =>
                     setForm({ ...form, department: Number(event.target.value) })
@@ -163,9 +183,21 @@ export default function HiringRequestsPage() {
                   ))}
                 </select>
               </Field>
+              <Field label="Seniority" required>
+                <Input
+                  required
+                  value={form.seniority}
+                  onChange={(event) =>
+                    setForm({ ...form, seniority: event.target.value })
+                  }
+                  placeholder="Mid-level"
+                  className="border-white/15 bg-white/10 text-mist placeholder:text-mist/40"
+                />
+              </Field>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Headcount">
+                <Field label="Headcount" required>
                   <Input
+                    required
                     type="number"
                     min={1}
                     value={form.headcount}
@@ -201,6 +233,60 @@ export default function HiringRequestsPage() {
                   </select>
                 </Field>
               </div>
+              <Field label="Budget">
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={form.budget ?? ""}
+                  onChange={(event) =>
+                    setForm({ ...form, budget: event.target.value })
+                  }
+                  placeholder="Optional budget"
+                  className="border-white/15 bg-white/10 text-mist placeholder:text-mist/40"
+                />
+              </Field>
+              <Field label="Reason for request" required>
+                <textarea
+                  required
+                  value={form.reason}
+                  onChange={(event) =>
+                    setForm({ ...form, reason: event.target.value })
+                  }
+                  rows={3}
+                  className="mt-2 min-h-24 w-full resize-y rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm text-mist outline-none placeholder:text-mist/40 focus:border-coral"
+                  placeholder="Why is this role needed?"
+                />
+              </Field>
+              <Field label="Required experience" required>
+                <Input
+                  required
+                  value={form.required_experience}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      required_experience: event.target.value,
+                    })
+                  }
+                  placeholder="Relevant experience"
+                  className="border-white/15 bg-white/10 text-mist placeholder:text-mist/40"
+                />
+              </Field>
+              <Field label="Required qualifications" required>
+                <textarea
+                  required
+                  value={form.required_qualifications}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      required_qualifications: event.target.value,
+                    })
+                  }
+                  rows={3}
+                  className="mt-2 min-h-24 w-full resize-y rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm text-mist outline-none placeholder:text-mist/40 focus:border-coral"
+                  placeholder="Qualifications and certifications"
+                />
+              </Field>
               <Button
                 type="submit"
                 disabled={saving}
@@ -212,7 +298,7 @@ export default function HiringRequestsPage() {
           </CardContent>
         </Card>
 
-        <section>
+        <section className="min-w-0">
           <div className="flex items-end justify-between gap-4">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-coral">
@@ -239,7 +325,7 @@ export default function HiringRequestsPage() {
                     className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div>
-                      <h3 className="font-display text-xl font-bold">
+                      <h3 className="break-words font-display text-xl font-bold">
                         {request.request_title}
                       </h3>
                       <p className="mt-1 text-sm text-ink/55">
@@ -284,10 +370,23 @@ export default function HiringRequestsPage() {
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({
+  label,
+  required = false,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  children: ReactNode;
+}) {
   return (
     <Label className="block text-mist/75">
       {label}
+      {required && (
+        <span className="ml-1 text-coral" aria-hidden="true">
+          *
+        </span>
+      )}
       {children}
     </Label>
   );

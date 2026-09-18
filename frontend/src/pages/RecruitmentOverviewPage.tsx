@@ -43,7 +43,7 @@ export default function RecruitmentOverviewPage() {
   if (!overview) return null;
 
   return (
-    <div>
+    <div className="min-w-0">
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-coral">
           Talent operations
@@ -80,7 +80,7 @@ export default function RecruitmentOverviewPage() {
         />
       </div>
 
-      <div className="mt-10 grid gap-8 xl:grid-cols-[1.2fr_0.8fr]">
+      <div className="mt-10 grid min-w-0 gap-8 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
         <section>
           <SectionHeading eyebrow="Live roles" title="Open jobs" />
           <div className="mt-5 divide-y divide-ink/10 border-y border-ink/10">
@@ -142,7 +142,7 @@ export default function RecruitmentOverviewPage() {
         </section>
       </div>
 
-      <div className="mt-10 grid gap-8 xl:grid-cols-2">
+      <div className="mt-10 grid min-w-0 gap-8 xl:grid-cols-2">
         <section>
           <SectionHeading
             eyebrow="Needs review"
@@ -158,7 +158,9 @@ export default function RecruitmentOverviewPage() {
                   className="flex items-center justify-between gap-4 py-4"
                 >
                   <div>
-                    <h2 className="font-semibold">{request.request_title}</h2>
+                    <h2 className="break-words font-semibold">
+                      {request.request_title}
+                    </h2>
                     <p className="mt-1 text-sm text-ink/55">
                       {request.department_name} · {request.requested_by_name}
                     </p>
@@ -193,7 +195,7 @@ export default function RecruitmentOverviewPage() {
                   className="flex items-center justify-between gap-4 py-4"
                 >
                   <div>
-                    <h2 className="font-semibold">
+                    <h2 className="break-words font-semibold">
                       {candidate.candidate_name}
                     </h2>
                     <p className="mt-1 text-sm text-ink/55">

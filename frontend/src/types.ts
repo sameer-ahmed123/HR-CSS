@@ -40,7 +40,12 @@ export interface HiringRequestInput {
   request_title: string;
   department: number;
   headcount: number;
+  seniority: string;
+  budget: string | null;
+  reason: string;
   urgency: HiringRequestUrgency;
+  required_experience: string;
+  required_qualifications: string;
 }
 
 export interface HiringRequest extends HiringRequestInput {

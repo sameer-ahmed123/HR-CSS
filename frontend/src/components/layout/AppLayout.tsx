@@ -71,6 +71,12 @@ const navigation: {
     icon: BriefcaseBusiness,
     roles: ["TEAM_LEAD"],
   },
+  {
+    label: "Review Requests",
+    path: "/recruitment/review",
+    icon: BriefcaseBusiness,
+    roles: ["ADMIN", "HR"],
+  },
 ];
 
 export default function AppLayout() {

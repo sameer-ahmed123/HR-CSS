@@ -5,7 +5,7 @@ from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from common.permissions import HasRole
+from common.permissions import HasRole, IsAdminOrHR
 from recruitment.serializers import HiringRequesDetailSerializer, RecruitmentOverviewSerializer, HiringRequesSerializer
 from recruitment.models import JobPosting, Application, HiringRequest, CandidateEmailLog
 # Create your views here.
@@ -73,19 +73,24 @@ def recruitment_overview(request):
 
 
 @api_view(["GET", "POST"])
-@permission_classes([IsAuthenticated, HasRole(["TEAM_LEAD"])])
-def hiring_request(request):
+@permission_classes([IsAuthenticated])
+def hiring_request_list(request):
     if request.method == "GET":
-        hiring_requests = HiringRequest.objects.filter(
-            requested_by=request.user)
+        if request.user.role == "TEAM_LEAD":
+            hiring_requests = HiringRequest.objects.filter(
+                requested_by=request.user)
+        else:
+            hiring_requests = HiringRequest.objects.all()
         serializer = HiringRequesSerializer(hiring_requests, many=True)
         return Response(serializer.data)
     elif request.method == "POST":
+        if request.user.role != "TEAM_LEAD":
+            return Response({"detail": "Only Team Leads can submit hiring requests."}, status=403)
         serializer = HiringRequesSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(requested_by=request.user)
             return Response(serializer.data, status=201)
-    return Response(serializer.errors, status=400)
+        return Response(serializer.errors, status=400)
 
 
 @api_view(["GET", "PUT", "PATCH", "DELETE"])
@@ -109,17 +114,47 @@ def hiring_request_detail(request, pk):
         if serializer.is_valid():
             updated_instance = serializer.save()
             return Response(HiringRequesDetailSerializer(updated_instance).data)
-        # Check if status allows editing (e.g., status == 'PENDING')
-        # If locked -> return Response({"error": "Cannot edit an approved/rejected request"}, status=400)
-        # Else -> serializer.is_valid() -> serializer.save()
-        pass
+        return Response(serializer.errors, status=400)
 
     elif request.method == "DELETE":
         if hiring_request.status != "PENDING":
             return Response({"error": "Cannot edit an approved/rejected request"}, status=400)
         hiring_request.delete()
-        return Response({"message": "hiring Request Deleted Successfuly!"})
-        # Check if status allows deletion
-        # hiring_req.delete()
-        # return Response(status=204)
-        pass
+        return Response(status=204)
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR"])])
+def hiring_request_hr_action(request, pk):
+    hiring_request = get_object_or_404(HiringRequest, id=pk)
+
+    status = request.data.get("status")
+    rejection_reason = request.data.get("rejection_reason", "").strip()
+
+    allowed_statuses = [
+        HiringRequest.RequestStatus.APPROVED,
+        HiringRequest.RequestStatus.REJECTED,
+        HiringRequest.RequestStatus.MORE_INFO,
+    ]
+    if status not in allowed_statuses:
+        return Response(
+            {"error": f"Invalid status. Must be one of: {allowed_statuses}"},
+            status=400
+        )
+
+    if status == HiringRequest.RequestStatus.REJECTED:
+        if not rejection_reason:
+            return Response(
+                {"error": "A rejection_reason is required when rejecting a request."},
+                status=400
+            )
+        hiring_request.rejection_reason = rejection_reason
+
+    hiring_request.status = status
+    hiring_request.save(
+        update_fields=["status", "rejection_reason"]
+        if status == HiringRequest.RequestStatus.REJECTED else ["status"]
+    )
+
+    serializer = HiringRequesDetailSerializer(hiring_request)
+    return Response(serializer.data, status=200)

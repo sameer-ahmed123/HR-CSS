@@ -16,4 +16,13 @@ export const recruitmentApi = {
     client.patch<HiringRequest>(`/recruitment/hiringreq/${id}/`, data),
   deleteHiringRequest: (id: number) =>
     client.delete(`/recruitment/hiringreq/${id}/`),
+  updateHiringRequestStatus: (
+    id: number,
+    status: "APPROVED" | "REJECTED" | "MORE_INFO",
+    rejection_reason?: string,
+  ) =>
+    client.patch<HiringRequest>(`/recruitment/hiringreq/${id}/status/`, {
+      status,
+      rejection_reason,
+    }),
 };
