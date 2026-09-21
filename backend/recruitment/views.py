@@ -1,37 +1,52 @@
 import datetime
 import logging
+import mimetypes
+import re
 
 from django.conf import settings
 from django.core.mail import send_mail
+from django.db.models import Count, Q
+from django.http import FileResponse
 from django.shortcuts import get_object_or_404, render
+from django.template import Context, Template
 from django.utils import timezone
 from rest_framework.decorators import api_view, parser_classes, permission_classes
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+
 from common.permissions import HasRole, IsAdminOrHR
 from recruitment.serializers import (
     ApplicationDetailSerializer,
     ApplicationListSerializer,
+    BulkStageUpdateSerializer,
+    CandidateEmailLogSerializer,
+    CandidateNoteSerializer,
+    CandidatePipelineListSerializer,
+    CVScoreBreakdownSerializer,
+    EmailDispatchSerializer,
+    EmailPreviewSerializer,
+    EmailTemplateSerializer,
     HiringRequesDetailSerializer,
     JobApplicationSubmitSerializer,
     JobPostingSerializer,
     PublicJobPostingSerializer,
     RecruitmentOverviewSerializer,
+    SendEmailPayloadSerializer,
     HiringRequesSerializer,
 )
 from recruitment.models import (
     Application,
+    ApplicationStageHistory,
     Candidate,
     CandidateEmailLog,
+    CandidateNote,
+    CVScore,
+    EmailTemplate,
     HiringRequest,
     JobPosting,
 )
 # Create your views here.
-
-import datetime
-from django.utils import timezone
-from django.db.models import Count, Q
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +57,104 @@ def _normalize_bool(value):
     if value is None:
         return False
     return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _normalize_tokens(value):
+    if not value:
+        return []
+    return re.findall(r"[a-zA-Z0-9+#.]+", str(value).lower())
+
+
+def _extract_years(value):
+    if not value:
+        return 0
+    matches = re.findall(r"(\d+)\+?\s*(?:years?|yrs?)", str(value).lower())
+    if matches:
+        return int(matches[0])
+    matches = re.findall(r"(\d+)\+?\s*(?:months?)", str(value).lower())
+    if matches:
+        return round(int(matches[0]) / 12, 1)
+    return 0
+
+
+def _score_application(application):
+    job = application.job_posting
+    candidate = application.candidate
+
+    required_skills = _normalize_tokens(job.required_skills)
+    candidate_skills = _normalize_tokens(candidate.candidate_skills)
+    candidate_profile_text = _normalize_tokens(
+        f"{candidate.about} {candidate.candidate_name}")
+    skill_matches = sorted(
+        {token for token in required_skills if token in candidate_skills or token in candidate_profile_text})
+    skill_score = 0
+    if required_skills:
+        skill_score = round((len(skill_matches) / len(required_skills)) * 100)
+    skill_score = max(0, min(100, skill_score))
+
+    required_experience = _extract_years(job.required_experience)
+    candidate_experience = _extract_years(candidate.about)
+    if required_experience:
+        experience_score = min(100, round(
+            (candidate_experience / required_experience) * 100)) if candidate_experience else 35
+    else:
+        experience_score = 75 if candidate_experience else 50
+
+    education_keywords = ["bachelor", "bsc", "ba", "master", "msc",
+                          "mba", "phd", "degree", "diploma", "certificate", "certification"]
+    profile_text = (candidate.about or "").lower()
+    education_score = 100 if any(
+        keyword in profile_text for keyword in education_keywords) else 50
+    if candidate.about and not any(keyword in profile_text for keyword in education_keywords):
+        education_score = 60
+
+    overall_score = int(round((skill_score * 0.5) +
+                        (experience_score * 0.3) + (education_score * 0.2)))
+    overall_score = max(0, min(100, overall_score))
+
+    notes = [
+        f"Skills matched {len(skill_matches)} of {len(required_skills) or 1} required skill keywords.",
+        f"Experience assessment based on {candidate_experience or 0} years against the role requirement of {required_experience or 0} years.",
+        f"Education signal: {'found in candidate profile' if education_score >= 75 else 'minimal/unclear from candidate profile'}.",
+    ]
+    breakdown = {
+        "overall_score": overall_score,
+        "skills_score": skill_score,
+        "experience_score": experience_score,
+        "education_score": education_score,
+        "breakdown_notes": " | ".join(notes),
+    }
+
+    application.ats_score = overall_score
+    application.score_reasons = breakdown
+    application.is_priority = overall_score >= job.cv_score_threshold
+    application.save(
+        update_fields=["ats_score", "score_reasons", "is_priority", "updated_at"])
+
+    cv_score, _ = CVScore.objects.update_or_create(
+        application=application,
+        defaults={
+            "overall_score": overall_score,
+            "skills_score": skill_score,
+            "experience_score": experience_score,
+            "education_score": education_score,
+            "breakdown_notes": breakdown["breakdown_notes"],
+        },
+    )
+
+    return {
+        "overall_score": overall_score,
+        "skills_score": skill_score,
+        "experience_score": experience_score,
+        "education_score": education_score,
+        "breakdown_notes": breakdown["breakdown_notes"],
+        "is_priority": application.is_priority,
+        "cv_score_id": cv_score.id,
+    }
+
+
+def _render_email_template(template_text, context):
+    return Template(template_text).render(Context(context))
 
 
 def _create_job_posting_for_hiring_request(hiring_request):
@@ -481,3 +594,362 @@ def job_posting_status_change(request, pk):
     job.save(update_fields=["status", "updated_at"])
 
     return Response(JobPostingSerializer(job).data, status=200)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR"])])
+def run_cv_scoring_detail(request, application_id):
+    application = get_object_or_404(Application.objects.select_related(
+        "candidate", "job_posting"), id=application_id)
+    result = _score_application(application)
+    return Response(CVScoreBreakdownSerializer(CVScore.objects.get(application=application)).data | {"is_priority": result["is_priority"]}, status=200)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR"])])
+def rescore_job_applications_bulk(request, job_id):
+    job = get_object_or_404(JobPosting, id=job_id)
+    applications = Application.objects.filter(
+        job_posting=job).select_related("candidate", "job_posting")
+    results = []
+    for application in applications:
+        results.append(_score_application(application))
+    return Response({"job_id": job.id, "scored_count": len(results), "results": results}, status=200)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR", "TEAM_LEAD"])])
+def candidate_pipeline_list_view(request, job_id):
+    job = get_object_or_404(JobPosting, id=job_id)
+    if request.user.role == "TEAM_LEAD" and request.user.department != job.department:
+        return Response({"error": "You do not have access to this job posting."}, status=403)
+
+    queryset = Application.objects.filter(job_posting=job).select_related(
+        "candidate", "job_posting").prefetch_related("notes", "stage_history")
+    stage = request.query_params.get("stage")
+    q = request.query_params.get("q")
+    if stage:
+        queryset = queryset.filter(stage=stage)
+    if q:
+        queryset = queryset.filter(
+            Q(candidate__candidate_name__icontains=q) | Q(candidate__email__icontains=q))
+
+    queryset = queryset.order_by("-ats_score", "-is_priority", "-created_at")
+    serializer = CandidatePipelineListSerializer(queryset, many=True)
+    return Response(serializer.data, status=200)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR", "TEAM_LEAD"])])
+def candidate_pipeline_list(request, job_id):
+    return candidate_pipeline_list_view(request, job_id)
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR"])])
+def update_application_stage_view(request, application_id):
+    application = get_object_or_404(Application.objects.select_related(
+        "candidate", "job_posting"), id=application_id)
+    new_stage = request.data.get("new_stage")
+    allowed_stages = [
+        Application.Stage.NEW,
+        Application.Stage.REVIEWED,
+        Application.Stage.SHORTLISTED,
+        Application.Stage.TEST_SENT,
+        Application.Stage.INTERVIEW,
+        Application.Stage.OFFER,
+        Application.Stage.HIRED,
+        Application.Stage.REJECTED,
+    ]
+    if new_stage not in allowed_stages:
+        return Response({"error": "Invalid stage value."}, status=400)
+
+    old_stage = application.stage
+    application.stage = new_stage
+    application.save(update_fields=["stage", "updated_at"])
+
+    ApplicationStageHistory.objects.create(
+        application=application,
+        old_stage=old_stage,
+        new_stage=new_stage,
+        changed_by=request.user,
+    )
+
+    serializer = ApplicationDetailSerializer(application)
+    return Response(serializer.data, status=200)
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR"])])
+def update_candidate_stage(request, application_id):
+    return update_application_stage_view(request, application_id)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR"])])
+def add_candidate_note_view(request, application_id):
+    application = get_object_or_404(Application.objects.select_related(
+        "candidate", "job_posting"), id=application_id)
+    text = (request.data.get("text") or "").strip()
+    if not text:
+        return Response({"error": "Note text is required."}, status=400)
+
+    note = CandidateNote.objects.create(
+        application=application,
+        author=request.user,
+        text=text,
+    )
+    serializer = CandidateNoteSerializer(note)
+    return Response(serializer.data, status=201)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR"])])
+def add_candidate_note(request, application_id):
+    return add_candidate_note_view(request, application_id)
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR"])])
+def bulk_update_stage_view(request):
+    serializer = BulkStageUpdateSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=400)
+
+    applications = Application.objects.filter(
+        id__in=serializer.validated_data["application_ids"]).select_related("candidate")
+    new_stage = serializer.validated_data["new_stage"]
+    for application in applications:
+        old_stage = application.stage
+        application.stage = new_stage
+        application.save(update_fields=["stage", "updated_at"])
+        ApplicationStageHistory.objects.create(
+            application=application,
+            old_stage=old_stage,
+            new_stage=new_stage,
+            changed_by=request.user,
+        )
+
+    return Response({"updated_count": applications.count(), "new_stage": new_stage}, status=200)
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR"])])
+def bulk_update_candidate_stage(request):
+    return bulk_update_stage_view(request)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR", "TEAM_LEAD"])])
+def application_cv_download(request, application_id):
+    application = get_object_or_404(
+        Application.objects.select_related("candidate", "job_posting"),
+        id=application_id,
+    )
+
+    if request.user.role == "TEAM_LEAD" and request.user.department != application.job_posting.department:
+        return Response({"error": "You do not have access to this application."}, status=403)
+
+    if not application.attached_cv or not application.attached_cv.name:
+        return Response({"error": "No CV uploaded for this application."}, status=404)
+
+    file_name = application.attached_cv.name.split("/")[-1]
+    content_type = mimetypes.guess_type(
+        file_name)[0] or "application/octet-stream"
+    response = FileResponse(application.attached_cv.open(
+        "rb"), as_attachment=True, filename=file_name)
+    response["Content-Type"] = content_type
+    return response
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR", "TEAM_LEAD"])])
+def candidate_cv_download(request, application_id):
+    return application_cv_download(request, application_id)
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR"])])
+def email_template_list_create_view(request):
+    if request.method == "GET":
+        templates = EmailTemplate.objects.all()
+        serializer = EmailTemplateSerializer(templates, many=True)
+        return Response(serializer.data, status=200)
+
+    serializer = EmailTemplateSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=400)
+    template = serializer.save(created_by=request.user)
+    return Response(EmailTemplateSerializer(template).data, status=201)
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR"])])
+def email_template_list_create(request):
+    return email_template_list_create_view(request)
+
+
+@api_view(["GET", "PUT", "PATCH", "DELETE"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR"])])
+def email_template_detail_view(request, pk):
+    template = get_object_or_404(EmailTemplate, id=pk)
+    if request.method == "GET":
+        return Response(EmailTemplateSerializer(template).data, status=200)
+    if request.method in ["PUT", "PATCH"]:
+        serializer = EmailTemplateSerializer(
+            template, data=request.data, partial=request.method == "PATCH")
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+        serializer.save()
+        return Response(serializer.data, status=200)
+    template.delete()
+    return Response(status=204)
+
+
+@api_view(["GET", "PUT", "PATCH", "DELETE"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR"])])
+def email_template_detail(request, pk):
+    return email_template_detail_view(request, pk)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR"])])
+def preview_candidate_email_view(request):
+    serializer = EmailPreviewSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=400)
+
+    candidate = get_object_or_404(
+        Candidate, id=serializer.validated_data["candidate_id"])
+    template = get_object_or_404(
+        EmailTemplate, id=serializer.validated_data["template_id"])
+    application = Application.objects.filter(
+        candidate=candidate).order_by("-created_at").first()
+    context = {
+        "candidate_name": candidate.candidate_name,
+        "job_title": application.job_posting.job_title if application else "Role",
+        "company_name": "HR-CSS",
+        "email": candidate.email,
+        "phone": candidate.phone_number or "",
+    }
+    rendered_subject = _render_email_template(template.subject, context)
+    rendered_body = _render_email_template(template.body, context)
+    return Response({"subject": rendered_subject, "body": rendered_body}, status=200)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR"])])
+def preview_candidate_email(request):
+    return preview_candidate_email_view(request)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR"])])
+def send_candidate_email_view(request):
+    serializer = SendEmailPayloadSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=400)
+
+    payload = serializer.validated_data
+    template = None
+    if payload.get("template_id") is not None:
+        template = get_object_or_404(EmailTemplate, id=payload["template_id"])
+
+    application_ids = payload.get("application_ids") or []
+    candidate_ids = payload.get("candidate_ids") or []
+    applications = []
+    if application_ids:
+        applications = list(Application.objects.filter(
+            id__in=application_ids).select_related("candidate", "job_posting"))
+    elif candidate_ids:
+        applications = list(Application.objects.filter(
+            candidate_id__in=candidate_ids).select_related("candidate", "job_posting"))
+
+    if not applications and payload.get("template_id") is None:
+        return Response({"error": "No matching applications found."}, status=400)
+
+    dispatched = []
+    for application in applications:
+        candidate = application.candidate
+        if template:
+            context = {
+                "candidate_name": candidate.candidate_name,
+                "job_title": application.job_posting.job_title,
+                "company_name": "HR-CSS",
+                "email": candidate.email,
+                "phone": candidate.phone_number or "",
+            }
+            subject = _render_email_template(template.subject, context)
+            body = _render_email_template(template.body, context)
+        else:
+            subject = payload.get("subject") or ""
+            body = payload.get("body") or ""
+
+        try:
+            send_mail(subject=subject, message=body, from_email=settings.DEFAULT_FROM_EMAIL,
+                      recipient_list=[candidate.email], fail_silently=False)
+            status = CandidateEmailLog.EmailStatus.SUCCESS
+            is_sent_successfully = True
+            error_message = ""
+            sent_at = timezone.now()
+        except Exception as exc:
+            status = CandidateEmailLog.EmailStatus.FAILED
+            is_sent_successfully = False
+            error_message = str(exc)
+            sent_at = timezone.now()
+
+        log = CandidateEmailLog.objects.create(
+            candidate=candidate,
+            job_posting=application.job_posting,
+            template=template,
+            sent_by=request.user,
+            recipient_email=candidate.email,
+            subject=subject,
+            body=body,
+            status=status,
+            is_sent_successfully=is_sent_successfully,
+            error_message=error_message,
+            sent_at=sent_at,
+        )
+        dispatched.append(CandidateEmailLogSerializer(log).data)
+
+    return Response({"sent_count": len(dispatched), "items": dispatched}, status=200)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR"])])
+def send_candidate_email(request):
+    return send_candidate_email_view(request)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR"])])
+def retry_failed_email_view(request):
+    failed_logs = CandidateEmailLog.objects.filter(
+        status=CandidateEmailLog.EmailStatus.FAILED).select_related("candidate", "job_posting", "template")
+    retried = []
+    for log in failed_logs:
+        try:
+            send_mail(subject=log.subject, message=log.body, from_email=settings.DEFAULT_FROM_EMAIL,
+                      recipient_list=[log.recipient_email or log.candidate.email], fail_silently=False)
+            log.status = CandidateEmailLog.EmailStatus.SUCCESS
+            log.is_sent_successfully = True
+            log.error_message = ""
+            log.sent_at = timezone.now()
+            log.save(update_fields=[
+                     "status", "is_sent_successfully", "error_message", "sent_at", "updated_at"])
+            retried.append(CandidateEmailLogSerializer(log).data)
+        except Exception as exc:
+            log.status = CandidateEmailLog.EmailStatus.FAILED
+            log.is_sent_successfully = False
+            log.error_message = str(exc)
+            log.sent_at = timezone.now()
+            log.save(update_fields=[
+                     "status", "is_sent_successfully", "error_message", "sent_at", "updated_at"])
+    return Response({"retried_count": len(retried), "items": retried}, status=200)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR"])])
+def retry_failed_candidate_email(request):
+    return retry_failed_email_view(request)

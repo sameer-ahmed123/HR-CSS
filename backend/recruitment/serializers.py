@@ -1,5 +1,16 @@
 from rest_framework import serializers
-from .models import HiringRequest, JobPosting, Candidate, Application, CandidateEmailLog
+
+from .models import (
+    Application,
+    ApplicationStageHistory,
+    Candidate,
+    CandidateEmailLog,
+    CandidateNote,
+    CVScore,
+    EmailTemplate,
+    HiringRequest,
+    JobPosting,
+)
 
 
 class HiringRequesSerializer(serializers.ModelSerializer):
@@ -160,7 +171,6 @@ class JobPostingSerializer(serializers.ModelSerializer):
         read_only_fields = ["created_at", "updated_at", "applicant_count"]
 
     def validate_hiring_request(self, value):
-        """Ensure hiring request is APPROVED before linking to a Job Posting."""
         if value and value.status != HiringRequest.RequestStatus.APPROVED:
             raise serializers.ValidationError(
                 "Cannot link a job posting to an unapproved hiring request."
@@ -168,11 +178,64 @@ class JobPostingSerializer(serializers.ModelSerializer):
         return value
 
 
+class CVScoreSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CVScore
+        fields = [
+            "id",
+            "overall_score",
+            "skills_score",
+            "experience_score",
+            "education_score",
+            "breakdown_notes",
+            "scored_at",
+        ]
+
+
+class CVScoreBreakdownSerializer(CVScoreSerializer):
+    class Meta(CVScoreSerializer.Meta):
+        pass
+
+
+class ApplicationStageHistorySerializer(serializers.ModelSerializer):
+    changed_by_email = serializers.CharField(
+        source='changed_by.email', read_only=True)
+
+    class Meta:
+        model = ApplicationStageHistory
+        fields = [
+            "id",
+            "old_stage",
+            "new_stage",
+            "changed_by",
+            "changed_by_email",
+            "timestamp",
+        ]
+
+
+class CandidateNoteSerializer(serializers.ModelSerializer):
+    author_name = serializers.CharField(source='author.email', read_only=True)
+
+    class Meta:
+        model = CandidateNote
+        fields = [
+            "id",
+            "author",
+            "author_name",
+            "text",
+            "created_at",
+        ]
+
+
 class ApplicationDetailSerializer(serializers.ModelSerializer):
     candidate = CandidateSummarySerializer(read_only=True)
     job_posting = JobPostingSerializer(read_only=True)
     stage_label = serializers.CharField(
         source='get_stage_display', read_only=True)
+    cv_score = CVScoreSerializer(read_only=True)
+    stage_history = ApplicationStageHistorySerializer(
+        many=True, read_only=True)
+    notes = CandidateNoteSerializer(many=True, read_only=True)
 
     class Meta:
         model = Application
@@ -186,14 +249,12 @@ class ApplicationDetailSerializer(serializers.ModelSerializer):
             'ats_score',
             'score_reasons',
             'is_priority',
+            'cv_score',
+            'stage_history',
+            'notes',
             'created_at',
             'updated_at',
         ]
-
-
-# ==========================================
-# JOBPOSTIN RELATED SERIALIZERS
-# =========================================
 
 
 class PublicJobPostingSerializer(serializers.ModelSerializer):
@@ -257,6 +318,111 @@ class JobApplicationSubmitSerializer(serializers.Serializer):
                     normalized_links.append({"label": label, "url": url})
 
         return normalized_links
+
+
+class EmailTemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EmailTemplate
+        fields = [
+            'id',
+            'name',
+            'template_type',
+            'subject',
+            'body',
+            'is_active',
+            'created_by',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
+
+
+class CandidateEmailLogSerializer(serializers.ModelSerializer):
+    candidate_name = serializers.CharField(
+        source='candidate.candidate_name', read_only=True)
+    job_title = serializers.CharField(
+        source='job_posting.job_title', read_only=True)
+
+    class Meta:
+        model = CandidateEmailLog
+        fields = [
+            'id',
+            'candidate',
+            'candidate_name',
+            'job_posting',
+            'job_title',
+            'template',
+            'recipient_email',
+            'subject',
+            'body',
+            'status',
+            'is_sent_successfully',
+            'error_message',
+            'sent_at',
+            'created_at',
+        ]
+
+
+class EmailPreviewSerializer(serializers.Serializer):
+    candidate_id = serializers.IntegerField()
+    template_id = serializers.IntegerField()
+
+
+class SendEmailPayloadSerializer(serializers.Serializer):
+    template_id = serializers.IntegerField(required=False, allow_null=True)
+    candidate_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False)
+    application_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False)
+    subject = serializers.CharField(required=False, allow_blank=True)
+    body = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        candidate_ids = attrs.get('candidate_ids') or []
+        application_ids = attrs.get('application_ids') or []
+        if not candidate_ids and not application_ids and not attrs.get('template_id'):
+            raise serializers.ValidationError(
+                'Provide candidate_ids or application_ids, and a template_id or explicit subject/body.')
+        return attrs
+
+
+class EmailDispatchSerializer(SendEmailPayloadSerializer):
+    pass
+
+
+class BulkStageUpdateSerializer(serializers.Serializer):
+    application_ids = serializers.ListField(child=serializers.IntegerField())
+    new_stage = serializers.ChoiceField(choices=Application.Stage.choices)
+
+
+class CandidatePipelineListSerializer(serializers.ModelSerializer):
+    candidate_name = serializers.CharField(
+        source='candidate.candidate_name', read_only=True)
+    candidate_email = serializers.CharField(
+        source='candidate.email', read_only=True)
+    stage_label = serializers.CharField(
+        source='get_stage_display', read_only=True)
+    score_breakdown = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Application
+        fields = [
+            'id',
+            'candidate_name',
+            'candidate_email',
+            'stage',
+            'stage_label',
+            'ats_score',
+            'is_priority',
+            'score_breakdown',
+            'created_at',
+        ]
+
+    def get_score_breakdown(self, obj):
+        cv_score = getattr(obj, 'cv_score', None)
+        if not cv_score:
+            return None
+        return CVScoreSerializer(cv_score).data
 
     def validate_cv(self, value):
         allowed_extensions = (".pdf", ".doc", ".docx")

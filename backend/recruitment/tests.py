@@ -208,3 +208,154 @@ class HiringRequestApprovalJobPostingTests(TestCase):
         self.assertEqual(detail_response.json()[
                          "candidate"]["email"], "alice@example.com")
         self.assertEqual(detail_response.json()["job_posting"]["id"], job.id)
+
+
+class RecruitmentATSAndPipelineTests(TestCase):
+    def setUp(self):
+        self.department = Department.objects.create(
+            name="Platform",
+            code="PLAT",
+            description="Platform engineering",
+        )
+        self.hr = CustomUser.objects.create_user(
+            email="ats.hr@example.com",
+            password="StrongPass123!",
+            first_name="ATS",
+            last_name="HR",
+            role=CustomUser.Role.HR,
+            department=self.department,
+        )
+        self.job = JobPosting.objects.create(
+            department=self.department,
+            job_title="Senior Python Engineer",
+            job_description="Build backend systems and APIs.",
+            required_skills="Python, Django, PostgreSQL",
+            required_experience="5+ years",
+            cv_score_threshold=70,
+            status=JobPosting.JobStatus.PUBLISHED,
+        )
+        self.candidate = Candidate.objects.create(
+            candidate_name="Candidate Alpha",
+            email="alpha@example.com",
+            phone_number="000111",
+            candidate_skills="Python, Django, PostgreSQL, Redis",
+            location="Lagos",
+            about="5 years of Python and Django engineering with a Bachelor's degree.",
+        )
+        self.application = Application.objects.create(
+            candidate=self.candidate,
+            job_posting=self.job,
+            attached_cv=SimpleUploadedFile(
+                "alpha.pdf", b"pdf", content_type="application/pdf"
+            ),
+            stage=Application.Stage.NEW,
+            ats_score=0,
+        )
+
+    def test_run_cv_scoring_updates_application_score_and_priority(self):
+        client = APIClient()
+        client.force_authenticate(user=self.hr)
+
+        response = client.post(
+            reverse("run_cv_scoring_view", kwargs={
+                    "application_id": self.application.id})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertGreater(payload["overall_score"], 0)
+        self.assertIn("skills_score", payload)
+        self.assertIn("breakdown_notes", payload)
+
+        self.application.refresh_from_db()
+        self.assertGreaterEqual(self.application.ats_score, 0)
+        self.assertTrue(
+            self.application.is_priority or self.application.ats_score >= 0)
+
+    def test_pipeline_stage_and_email_template_preview_work(self):
+        client = APIClient()
+        client.force_authenticate(user=self.hr)
+
+        stage_response = client.patch(
+            reverse("update_application_stage_view", kwargs={
+                    "application_id": self.application.id}),
+            {"new_stage": "REVIEWED"},
+            format="json",
+        )
+        self.assertEqual(stage_response.status_code, 200)
+        self.assertEqual(stage_response.json()["stage"], "REVIEWED")
+
+        template_response = client.post(
+            reverse("email_template_list_create_view"),
+            {
+                "name": "Interview Invite",
+                "template_type": "INTERVIEW_INVITATION",
+                "subject": "Interview for {{candidate_name}}",
+                "body": "Hi {{candidate_name}}, we would like to interview you for {{job_title}}.",
+                "is_active": True,
+            },
+            format="json",
+        )
+        self.assertEqual(template_response.status_code, 201)
+        template_id = template_response.json()["id"]
+
+        preview = client.post(
+            reverse("preview_candidate_email_view"),
+            {"candidate_id": self.candidate.id, "template_id": template_id},
+            format="json",
+        )
+        self.assertEqual(preview.status_code, 200)
+        self.assertIn("Candidate Alpha", preview.json()["subject"])
+        self.assertIn("Senior Python Engineer", preview.json()["body"])
+
+    def test_email_suite_alias_contract(self):
+        client = APIClient()
+        client.force_authenticate(user=self.hr)
+
+        template_response = client.post(
+            reverse("email_template_list_create"),
+            {
+                "name": "Welcome Note",
+                "template_type": "CUSTOM",
+                "subject": "Hi {{candidate_name}}",
+                "body": "Hello {{candidate_name}} for {{job_title}}.",
+                "is_active": True,
+            },
+            format="json",
+        )
+        self.assertEqual(template_response.status_code, 201)
+
+        preview = client.post(
+            reverse("preview_candidate_email"),
+            {"candidate_id": self.candidate.id, "template_id": template_response.json()[
+                "id"]},
+            format="json",
+        )
+        self.assertEqual(preview.status_code, 200)
+        self.assertIn("Candidate Alpha", preview.json()["subject"])
+
+        send_response = client.post(
+            reverse("send_candidate_email"),
+            {"template_id": template_response.json()["id"], "candidate_ids": [
+                self.candidate.id]},
+            format="json",
+        )
+        self.assertEqual(send_response.status_code, 200)
+        self.assertGreaterEqual(send_response.json()["sent_count"], 1)
+
+    def test_pipeline_alias_and_cv_download_contract(self):
+        client = APIClient()
+        client.force_authenticate(user=self.hr)
+
+        list_response = client.get(
+            reverse("candidate_pipeline_list", kwargs={"job_id": self.job.id})
+        )
+        self.assertEqual(list_response.status_code, 200)
+        self.assertGreater(len(list_response.json()), 0)
+
+        cv_response = client.get(
+            reverse("application_cv_download", kwargs={
+                    "application_id": self.application.id})
+        )
+        self.assertEqual(cv_response.status_code, 200)
+        self.assertIn("application/pdf", cv_response["Content-Type"])
