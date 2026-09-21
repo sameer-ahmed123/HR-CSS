@@ -501,8 +501,12 @@ def job_posting_list_create(request):
         return Response(serializer.data)
 
     elif request.method == "POST":
-        if request.user.role not in ["ADMIN", "HR"]:
-            return Response({"detail": "Only HR and Admins can create job postings."}, status=403)
+        if request.user.role == "TEAM_LEAD":
+            department_id = request.data.get("department")
+            if department_id is None or int(department_id) != request.user.department_id:
+                return Response({"detail": "Team Leads can only create job postings in their own department."}, status=403)
+        elif request.user.role not in ["ADMIN", "HR"]:
+            return Response({"detail": "Only HR, Admins, and Team Leads can create job postings."}, status=403)
 
         serializer = JobPostingSerializer(data=request.data)
         if serializer.is_valid():
@@ -522,8 +526,13 @@ def job_posting_detail(request, pk):
         serializer = JobPostingSerializer(job)
         return Response(serializer.data)
 
-    if request.user.role not in ["ADMIN", "HR"]:
-        return Response({"detail": "Only HR and Admins can edit job postings."}, status=403)
+    if request.user.role == "TEAM_LEAD":
+        if request.user.department_id != job.department_id:
+            return Response({"detail": "Team Leads can only edit job postings in their own department."}, status=403)
+        if job.status != JobPosting.JobStatus.DRAFT:
+            return Response({"detail": "Team Leads can only edit draft job postings."}, status=403)
+    elif request.user.role not in ["ADMIN", "HR"]:
+        return Response({"detail": "Only HR, Admins, and Team Leads can edit job postings."}, status=403)
 
     if request.method in ["PUT", "PATCH"]:
         serializer = JobPostingSerializer(

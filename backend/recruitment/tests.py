@@ -72,6 +72,80 @@ class HiringRequestApprovalJobPostingTests(TestCase):
         self.assertEqual(job_posting.status, JobPosting.JobStatus.DRAFT)
         self.assertIn("Python", job_posting.required_skills)
 
+    def test_team_lead_can_edit_draft_job_posting_in_their_department(self):
+        team_lead = CustomUser.objects.create_user(
+            email="eng-team-lead@example.com",
+            password="StrongPass123!",
+            first_name="Eng",
+            last_name="Lead",
+            role=CustomUser.Role.TEAM_LEAD,
+            department=self.department,
+        )
+        job = JobPosting.objects.create(
+            department=self.department,
+            job_title="Python Engineer",
+            job_description="Build APIs for the platform team.",
+            required_skills="Python, Django",
+            required_experience="3+ years",
+            status=JobPosting.JobStatus.DRAFT,
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=team_lead)
+
+        response = client.patch(
+            reverse("job-posting-detail", kwargs={"pk": job.id}),
+            {
+                "job_description": "Build backend APIs and improve platform reliability.",
+                "required_experience": "5+ years of Python and Django experience",
+                "required_skills": "Python, Django, PostgreSQL, system design",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        job.refresh_from_db()
+        self.assertEqual(job.job_description,
+                         "Build backend APIs and improve platform reliability.")
+        self.assertEqual(
+            job.required_experience,
+            "5+ years of Python and Django experience",
+        )
+        self.assertIn("PostgreSQL", job.required_skills)
+
+    def test_team_lead_cannot_edit_published_job_posting(self):
+        team_lead = CustomUser.objects.create_user(
+            email="eng-team-lead-published@example.com",
+            password="StrongPass123!",
+            first_name="Eng",
+            last_name="Lead",
+            role=CustomUser.Role.TEAM_LEAD,
+            department=self.department,
+        )
+        job = JobPosting.objects.create(
+            department=self.department,
+            job_title="Python Engineer",
+            job_description="Build APIs for the platform team.",
+            required_skills="Python, Django",
+            required_experience="3+ years",
+            status=JobPosting.JobStatus.PUBLISHED,
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=team_lead)
+
+        response = client.patch(
+            reverse("job-posting-detail", kwargs={"pk": job.id}),
+            {
+                "job_description": "This should not be allowed.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        job.refresh_from_db()
+        self.assertNotEqual(job.job_description, "This should not be allowed.")
+
     def test_public_job_list_and_apply_flow(self):
         job = JobPosting.objects.create(
             department=self.department,

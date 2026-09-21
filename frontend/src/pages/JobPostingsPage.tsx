@@ -32,7 +32,8 @@ const emptyForm = {
 
 export default function JobPostingsPage() {
   const { user } = useAuth();
-  const canManage = user?.role === "ADMIN" || user?.role === "HR";
+  const canManage =
+    user?.role === "ADMIN" || user?.role === "HR" || user?.role === "TEAM_LEAD";
   const [jobPostings, setJobPostings] = useState<JobPosting[]>([]);
   const [requests, setRequests] = useState<HiringRequest[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -96,7 +97,9 @@ export default function JobPostingsPage() {
       return;
     }
     if (!canManage) {
-      setError("Only Admin and HR can create or edit job postings.");
+      setError(
+        "Only Admin, HR, and Team Leads can create or edit job postings.",
+      );
       return;
     }
     setSaving(true);
@@ -157,8 +160,18 @@ export default function JobPostingsPage() {
     }
   }
 
+  function canEditPosting(posting: JobPosting) {
+    if (user?.role === "ADMIN" || user?.role === "HR") return true;
+    if (user?.role === "TEAM_LEAD") {
+      return (
+        user.department === posting.department && posting.status === "DRAFT"
+      );
+    }
+    return false;
+  }
+
   function editPosting(posting: JobPosting) {
-    if (!canManage) return;
+    if (!canEditPosting(posting)) return;
     setEditingId(posting.id);
     setForm({
       job_title: posting.job_title,
@@ -448,15 +461,16 @@ export default function JobPostingsPage() {
                               {posting.status === "DRAFT" ? "Publish" : "Close"}
                             </Button>
                           )}
-                          {posting.status === "DRAFT" && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() => editPosting(posting)}
-                            >
-                              <PencilLine size={16} /> Edit
-                            </Button>
-                          )}
+                          {canEditPosting(posting) &&
+                            posting.status === "DRAFT" && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => editPosting(posting)}
+                              >
+                                <PencilLine size={16} /> Edit
+                              </Button>
+                            )}
                           {posting.status === "DRAFT" && (
                             <Button
                               type="button"
