@@ -386,10 +386,6 @@ class SendEmailPayloadSerializer(serializers.Serializer):
         return attrs
 
 
-class EmailDispatchSerializer(SendEmailPayloadSerializer):
-    pass
-
-
 class BulkStageUpdateSerializer(serializers.Serializer):
     application_ids = serializers.ListField(child=serializers.IntegerField())
     new_stage = serializers.ChoiceField(choices=Application.Stage.choices)
@@ -423,15 +419,6 @@ class CandidatePipelineListSerializer(serializers.ModelSerializer):
         if not cv_score:
             return None
         return CVScoreSerializer(cv_score).data
-
-    def validate_cv(self, value):
-        allowed_extensions = (".pdf", ".doc", ".docx")
-        filename = (value.name or "").lower()
-        if not any(filename.endswith(ext) for ext in allowed_extensions):
-            raise serializers.ValidationError(
-                "CV must be a PDF, DOC, or DOCX file."
-            )
-        return value
 
 # ==========================================
 # DASHBOARD OVERVIEW SERIALIZER

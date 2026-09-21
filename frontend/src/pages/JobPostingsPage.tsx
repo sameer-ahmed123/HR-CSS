@@ -1,4 +1,4 @@
-import { BriefcaseBusiness, Eye, PencilLine, Plus, Trash2 } from "lucide-react";
+import { Eye, PencilLine, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { recruitmentApi } from "../api/recruitment";

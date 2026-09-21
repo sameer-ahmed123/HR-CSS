@@ -7,7 +7,7 @@ from django.conf import settings
 from django.core.mail import send_mail
 from django.db.models import Count, Q
 from django.http import FileResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404
 from django.template import Context, Template
 from django.utils import timezone
 from rest_framework.decorators import api_view, parser_classes, permission_classes
@@ -15,7 +15,7 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from common.permissions import HasRole, IsAdminOrHR
+from common.permissions import HasRole
 from recruitment.serializers import (
     ApplicationDetailSerializer,
     ApplicationListSerializer,
@@ -24,7 +24,6 @@ from recruitment.serializers import (
     CandidateNoteSerializer,
     CandidatePipelineListSerializer,
     CVScoreBreakdownSerializer,
-    EmailDispatchSerializer,
     EmailPreviewSerializer,
     EmailTemplateSerializer,
     HiringRequesDetailSerializer,
