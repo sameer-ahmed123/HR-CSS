@@ -17,6 +17,10 @@ import RecruitmentOverviewPage from "./pages/RecruitmentOverviewPage";
 import HiringRequestsPage from "./pages/HiringRequestsPage";
 import HiringRequestReviewPage from "./pages/HiringRequestReviewPage";
 import JobPostingsPage from "./pages/JobPostingsPage";
+import JobPostingDetailPage from "./pages/JobPostingDetailPage";
+import CareersPage from "./pages/CareersPage";
+import CareerDetailPage from "./pages/CareerDetailPage";
+import ApplyJobPage from "./pages/ApplyJobPage";
 
 export default function App() {
   return (
@@ -29,6 +33,9 @@ export default function App() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/403" element={<ForbiddenPage />} />
+          <Route path="/careers" element={<CareersPage />} />
+          <Route path="/careers/:jobId" element={<CareerDetailPage />} />
+          <Route path="/careers/:jobId/apply" element={<ApplyJobPage />} />
           <Route element={<ProtectedRoute />}>
             <Route element={<AppLayout />}>
               <Route index element={<DashboardPage />} />
@@ -48,6 +55,14 @@ export default function App() {
                   element={<RecruitmentOverviewPage />}
                 />
                 <Route path="recruitment/jobs" element={<JobPostingsPage />} />
+                <Route
+                  path="recruitment/jobs/:jobId"
+                  element={<JobPostingDetailPage />}
+                />
+                <Route
+                  path="recruitment/jobs/:jobId/applications/:applicationId"
+                  element={<JobPostingDetailPage />}
+                />
               </Route>
               <Route element={<ProtectedRoute roles={["TEAM_LEAD"]} />}>
                 <Route

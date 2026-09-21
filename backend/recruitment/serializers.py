@@ -89,9 +89,46 @@ class PriorityApplicationSerializer(serializers.ModelSerializer):
         ]
 
 
-# ==========================================
-# JOBPOSTIN RELATED SERIALIZERS
-# =========================================
+class CandidateSummarySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Candidate
+        fields = [
+            'id',
+            'candidate_name',
+            'email',
+            'phone_number',
+            'location',
+            'about',
+            'created_at',
+        ]
+
+
+class ApplicationListSerializer(serializers.ModelSerializer):
+    candidate_name = serializers.CharField(
+        source='candidate.candidate_name', read_only=True)
+    candidate_email = serializers.CharField(
+        source='candidate.email', read_only=True)
+    candidate_phone = serializers.CharField(
+        source='candidate.phone_number', read_only=True, allow_null=True)
+    candidate_location = serializers.CharField(
+        source='candidate.location', read_only=True, allow_blank=True)
+    stage_label = serializers.CharField(
+        source='get_stage_display', read_only=True)
+
+    class Meta:
+        model = Application
+        fields = [
+            'id',
+            'candidate_name',
+            'candidate_email',
+            'candidate_phone',
+            'candidate_location',
+            'stage',
+            'stage_label',
+            'ats_score',
+            'is_priority',
+            'created_at',
+        ]
 
 
 class JobPostingSerializer(serializers.ModelSerializer):
@@ -127,6 +164,106 @@ class JobPostingSerializer(serializers.ModelSerializer):
         if value and value.status != HiringRequest.RequestStatus.APPROVED:
             raise serializers.ValidationError(
                 "Cannot link a job posting to an unapproved hiring request."
+            )
+        return value
+
+
+class ApplicationDetailSerializer(serializers.ModelSerializer):
+    candidate = CandidateSummarySerializer(read_only=True)
+    job_posting = JobPostingSerializer(read_only=True)
+    stage_label = serializers.CharField(
+        source='get_stage_display', read_only=True)
+
+    class Meta:
+        model = Application
+        fields = [
+            'id',
+            'candidate',
+            'job_posting',
+            'attached_cv',
+            'stage',
+            'stage_label',
+            'ats_score',
+            'score_reasons',
+            'is_priority',
+            'created_at',
+            'updated_at',
+        ]
+
+
+# ==========================================
+# JOBPOSTIN RELATED SERIALIZERS
+# =========================================
+
+
+class PublicJobPostingSerializer(serializers.ModelSerializer):
+    department_name = serializers.CharField(
+        source="department.name", read_only=True)
+
+    class Meta:
+        model = JobPosting
+        fields = [
+            "id",
+            "job_title",
+            "job_description",
+            "department_name",
+            "required_skills",
+            "required_experience",
+            "closing_date",
+            "cv_score_threshold",
+            "created_at",
+        ]
+
+
+class JobApplicationSubmitSerializer(serializers.Serializer):
+    full_name = serializers.CharField(max_length=500)
+    email = serializers.EmailField()
+    phone = serializers.CharField(
+        max_length=50, required=False, allow_blank=True)
+    address = serializers.CharField(
+        max_length=500, required=False, allow_blank=True)
+    cover_letter = serializers.CharField(
+        required=False, allow_blank=True, trim_whitespace=False)
+    links = serializers.JSONField(required=False, allow_null=True)
+    cv = serializers.FileField(required=True, allow_empty_file=False)
+
+    def validate_links(self, value):
+        if value in (None, ""):
+            return []
+
+        if isinstance(value, str):
+            import json
+            try:
+                parsed = json.loads(value)
+            except (TypeError, ValueError):
+                return []
+            value = parsed
+
+        if not isinstance(value, list):
+            return []
+
+        normalized_links = []
+        for item in value:
+            if isinstance(item, str):
+                url = item.strip()
+                if url:
+                    normalized_links.append({"label": "Link", "url": url})
+                continue
+
+            if isinstance(item, dict):
+                url = str(item.get("url", "") or "").strip()
+                label = str(item.get("label", "") or "").strip() or "Link"
+                if url:
+                    normalized_links.append({"label": label, "url": url})
+
+        return normalized_links
+
+    def validate_cv(self, value):
+        allowed_extensions = (".pdf", ".doc", ".docx")
+        filename = (value.name or "").lower()
+        if not any(filename.endswith(ext) for ext in allowed_extensions):
+            raise serializers.ValidationError(
+                "CV must be a PDF, DOC, or DOCX file."
             )
         return value
 

@@ -1,18 +1,39 @@
 import datetime
+import logging
 
+from django.conf import settings
+from django.core.mail import send_mail
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import api_view, parser_classes, permission_classes
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from common.permissions import HasRole, IsAdminOrHR
-from recruitment.serializers import HiringRequesDetailSerializer, JobPostingSerializer, RecruitmentOverviewSerializer, HiringRequesSerializer
-from recruitment.models import JobPosting, Application, HiringRequest, CandidateEmailLog
+from recruitment.serializers import (
+    ApplicationDetailSerializer,
+    ApplicationListSerializer,
+    HiringRequesDetailSerializer,
+    JobApplicationSubmitSerializer,
+    JobPostingSerializer,
+    PublicJobPostingSerializer,
+    RecruitmentOverviewSerializer,
+    HiringRequesSerializer,
+)
+from recruitment.models import (
+    Application,
+    Candidate,
+    CandidateEmailLog,
+    HiringRequest,
+    JobPosting,
+)
 # Create your views here.
 
 import datetime
 from django.utils import timezone
 from django.db.models import Count, Q
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_bool(value):
@@ -156,6 +177,149 @@ def hiring_request_detail(request, pk):
         return Response(status=204)
 
 
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def public_job_list(request):
+    queryset = JobPosting.objects.filter(
+        status=JobPosting.JobStatus.PUBLISHED
+    ).select_related("department")
+
+    title = request.query_params.get("title")
+    department = request.query_params.get("department")
+    department_id = request.query_params.get("department_id")
+
+    if title:
+        queryset = queryset.filter(job_title__icontains=title)
+    if department:
+        queryset = queryset.filter(department__name__icontains=department)
+    if department_id:
+        queryset = queryset.filter(department_id=department_id)
+
+    serializer = PublicJobPostingSerializer(queryset, many=True)
+    return Response(serializer.data)
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def public_job_detail(request, job_id):
+    job = get_object_or_404(
+        JobPosting.objects.filter(
+            status=JobPosting.JobStatus.PUBLISHED).select_related("department"),
+        id=job_id,
+    )
+    serializer = PublicJobPostingSerializer(job)
+    return Response(serializer.data)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@parser_classes([MultiPartParser, FormParser])
+def public_job_apply(request, job_id):
+    job = get_object_or_404(
+        JobPosting.objects.filter(status=JobPosting.JobStatus.PUBLISHED),
+        id=job_id,
+    )
+
+    serializer = JobApplicationSubmitSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=400)
+
+    validated = serializer.validated_data
+    full_name = validated["full_name"].strip()
+    email = validated["email"].strip().lower()
+    phone = (validated.get("phone") or "").strip()
+    address = (validated.get("address") or "").strip()
+    cover_letter = (validated.get("cover_letter") or "").strip()
+    links = validated.get("links") or []
+    cv_file = validated["cv"]
+
+    candidate = Candidate.objects.filter(email__iexact=email).first()
+    if candidate is None:
+        candidate = Candidate.objects.create(
+            candidate_name=full_name,
+            email=email,
+            phone_number=phone,
+            candidate_skills=str(links) if links else "",
+            location=address,
+            about=cover_letter,
+        )
+    else:
+        changed = False
+        if phone and not candidate.phone_number:
+            candidate.phone_number = phone
+            changed = True
+        if address and not candidate.location:
+            candidate.location = address
+            changed = True
+        if cover_letter and not candidate.about:
+            candidate.about = cover_letter
+            changed = True
+        if links:
+            candidate.candidate_skills = str(links)
+            changed = True
+        if changed:
+            candidate.save()
+
+    if Application.objects.filter(candidate=candidate, job_posting=job).exists():
+        return Response(
+            {"error": "You have already applied for this position."},
+            status=400,
+        )
+
+    application = Application.objects.create(
+        candidate=candidate,
+        job_posting=job,
+        attached_cv=cv_file,
+        stage=Application.Stage.NEW,
+        ats_score=0,
+        score_reasons={},
+        is_priority=False,
+    )
+
+    subject = f"Thank you for applying for {job.job_title}"
+    message = (
+        f"Hi {full_name},\n\n"
+        f"Thank you for applying for the {job.job_title} position at {job.department.name} HR-CSS. "
+        "We have received your application and will review it shortly.\n\n"
+        "Best regards,\n"
+        "HR Team"
+    )
+
+    sent_successfully = True
+    error_message = ""
+    try:
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[email],
+            fail_silently=False,
+        )
+    except Exception as exc:
+        sent_successfully = False
+        error_message = str(exc)
+        logger.exception(
+            "Failed to send application confirmation email to %s", email)
+
+    CandidateEmailLog.objects.create(
+        candidate=candidate,
+        job_posting=job,
+        sent_by=None,
+        subject=subject,
+        body=message,
+        is_sent_successfully=sent_successfully,
+        error_message=error_message,
+    )
+
+    return Response(
+        {
+            "message": "Application submitted successfully.",
+            "application_id": application.id,
+        },
+        status=201,
+    )
+
+
 @api_view(["PATCH"])
 @permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR"])])
 def hiring_request_hr_action(request, pk):
@@ -236,15 +400,20 @@ def job_posting_list_create(request):
 
 
 @api_view(["GET", "PUT", "PATCH", "DELETE"])
-@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR"])])
+@permission_classes([IsAuthenticated])
 def job_posting_detail(request, pk):
     job = get_object_or_404(JobPosting, id=pk)
 
     if request.method == "GET":
+        if request.user.role == "TEAM_LEAD" and request.user.department != job.department:
+            return Response({"error": "You do not have access to this job posting."}, status=403)
         serializer = JobPostingSerializer(job)
         return Response(serializer.data)
 
-    elif request.method in ["PUT", "PATCH"]:
+    if request.user.role not in ["ADMIN", "HR"]:
+        return Response({"detail": "Only HR and Admins can edit job postings."}, status=403)
+
+    if request.method in ["PUT", "PATCH"]:
         serializer = JobPostingSerializer(
             job, data=request.data, partial=(request.method == "PATCH"))
         if serializer.is_valid():
@@ -261,6 +430,36 @@ def job_posting_detail(request, pk):
             )
         job.delete()
         return Response(status=204)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR", "TEAM_LEAD"])])
+def job_posting_applications(request, pk):
+    job = get_object_or_404(JobPosting, id=pk)
+
+    if request.user.role == "TEAM_LEAD" and request.user.department != job.department:
+        return Response({"error": "You do not have access to this job posting."}, status=403)
+
+    applications = job.applications.select_related(
+        "candidate").order_by("-created_at")
+    serializer = ApplicationListSerializer(applications, many=True)
+    return Response(serializer.data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, HasRole(["ADMIN", "HR", "TEAM_LEAD"])])
+def job_posting_application_detail(request, pk, application_id):
+    job = get_object_or_404(JobPosting, id=pk)
+
+    if request.user.role == "TEAM_LEAD" and request.user.department != job.department:
+        return Response({"error": "You do not have access to this job posting."}, status=403)
+
+    application = get_object_or_404(
+        job.applications.select_related("candidate", "job_posting"),
+        id=application_id,
+    )
+    serializer = ApplicationDetailSerializer(application)
+    return Response(serializer.data)
 
 
 @api_view(["PATCH"])

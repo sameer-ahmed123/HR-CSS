@@ -127,3 +127,57 @@ export interface JobPosting extends JobPostingInput {
   updated_at: string;
   status: JobStatus;
 }
+
+export interface CandidateSummary {
+  id: number;
+  candidate_name: string;
+  email: string;
+  phone_number: string | null;
+  location: string;
+  about: string;
+  created_at: string;
+}
+
+export interface JobPostingApplication {
+  id: number;
+  candidate_name: string;
+  candidate_email: string;
+  candidate_phone: string | null;
+  candidate_location: string;
+  stage: ApplicationStage;
+  stage_label: string;
+  ats_score: number;
+  is_priority: boolean;
+  created_at: string;
+}
+
+export interface JobPostingApplicationDetail {
+  id: number;
+  candidate: CandidateSummary;
+  job_posting: JobPosting;
+  attached_cv: string | null;
+  stage: ApplicationStage;
+  stage_label: string;
+  ats_score: number;
+  score_reasons: Record<string, unknown>;
+  is_priority: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PublicJobPosting {
+  id: number;
+  job_title: string;
+  job_description: string;
+  department_name: string;
+  required_skills: string;
+  required_experience: string;
+  closing_date: string | null;
+  cv_score_threshold: number;
+  created_at: string;
+}
+
+export interface PublicJobApplicationResponse {
+  message: string;
+  application_id: number;
+}

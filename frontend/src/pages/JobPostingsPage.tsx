@@ -1,5 +1,6 @@
-import { BriefcaseBusiness, PencilLine, Plus, Trash2 } from "lucide-react";
+import { BriefcaseBusiness, Eye, PencilLine, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { recruitmentApi } from "../api/recruitment";
 import { organizationApi } from "../api/organization";
 import { Alert } from "../components/ui/alert";
@@ -422,6 +423,13 @@ export default function JobPostingsPage() {
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
+                      {posting.status === "PUBLISHED" && (
+                        <Link to={`/recruitment/jobs/${posting.id}`}>
+                          <Button type="button" variant="outline">
+                            <Eye size={16} /> View details
+                          </Button>
+                        </Link>
+                      )}
                       {canManage && (
                         <>
                           {posting.status !== "CLOSED" && (
