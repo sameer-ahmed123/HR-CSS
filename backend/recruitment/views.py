@@ -1,14 +1,12 @@
 import datetime
 import logging
 import mimetypes
-import re
 
 from django.conf import settings
 from django.core.mail import send_mail
 from django.db.models import Count, Q
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404
-from django.template import Context, Template
 from django.utils import timezone
 from rest_framework.decorators import api_view, parser_classes, permission_classes
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -34,6 +32,12 @@ from recruitment.serializers import (
     SendEmailPayloadSerializer,
     HiringRequesSerializer,
 )
+from recruitment.services import (
+    create_job_posting_for_hiring_request,
+    normalize_bool,
+    render_email_template,
+    score_application,
+)
 from recruitment.models import (
     Application,
     ApplicationStageHistory,
@@ -48,137 +52,6 @@ from recruitment.models import (
 # Create your views here.
 
 logger = logging.getLogger(__name__)
-
-
-def _normalize_bool(value):
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return False
-    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
-
-
-def _normalize_tokens(value):
-    if not value:
-        return []
-    return re.findall(r"[a-zA-Z0-9+#.]+", str(value).lower())
-
-
-def _extract_years(value):
-    if not value:
-        return 0
-    matches = re.findall(r"(\d+)\+?\s*(?:years?|yrs?)", str(value).lower())
-    if matches:
-        return int(matches[0])
-    matches = re.findall(r"(\d+)\+?\s*(?:months?)", str(value).lower())
-    if matches:
-        return round(int(matches[0]) / 12, 1)
-    return 0
-
-
-def _score_application(application):
-    job = application.job_posting
-    candidate = application.candidate
-
-    required_skills = _normalize_tokens(job.required_skills)
-    candidate_skills = _normalize_tokens(candidate.candidate_skills)
-    candidate_profile_text = _normalize_tokens(
-        f"{candidate.about} {candidate.candidate_name}")
-    skill_matches = sorted(
-        {token for token in required_skills if token in candidate_skills or token in candidate_profile_text})
-    skill_score = 0
-    if required_skills:
-        skill_score = round((len(skill_matches) / len(required_skills)) * 100)
-    skill_score = max(0, min(100, skill_score))
-
-    required_experience = _extract_years(job.required_experience)
-    candidate_experience = _extract_years(candidate.about)
-    if required_experience:
-        experience_score = min(100, round(
-            (candidate_experience / required_experience) * 100)) if candidate_experience else 35
-    else:
-        experience_score = 75 if candidate_experience else 50
-
-    education_keywords = ["bachelor", "bsc", "ba", "master", "msc",
-                          "mba", "phd", "degree", "diploma", "certificate", "certification"]
-    profile_text = (candidate.about or "").lower()
-    education_score = 100 if any(
-        keyword in profile_text for keyword in education_keywords) else 50
-    if candidate.about and not any(keyword in profile_text for keyword in education_keywords):
-        education_score = 60
-
-    overall_score = int(round((skill_score * 0.5) +
-                        (experience_score * 0.3) + (education_score * 0.2)))
-    overall_score = max(0, min(100, overall_score))
-
-    notes = [
-        f"Skills matched {len(skill_matches)} of {len(required_skills) or 1} required skill keywords.",
-        f"Experience assessment based on {candidate_experience or 0} years against the role requirement of {required_experience or 0} years.",
-        f"Education signal: {'found in candidate profile' if education_score >= 75 else 'minimal/unclear from candidate profile'}.",
-    ]
-    breakdown = {
-        "overall_score": overall_score,
-        "skills_score": skill_score,
-        "experience_score": experience_score,
-        "education_score": education_score,
-        "breakdown_notes": " | ".join(notes),
-    }
-
-    application.ats_score = overall_score
-    application.score_reasons = breakdown
-    application.is_priority = overall_score >= job.cv_score_threshold
-    application.save(
-        update_fields=["ats_score", "score_reasons", "is_priority", "updated_at"])
-
-    cv_score, _ = CVScore.objects.update_or_create(
-        application=application,
-        defaults={
-            "overall_score": overall_score,
-            "skills_score": skill_score,
-            "experience_score": experience_score,
-            "education_score": education_score,
-            "breakdown_notes": breakdown["breakdown_notes"],
-        },
-    )
-
-    return {
-        "overall_score": overall_score,
-        "skills_score": skill_score,
-        "experience_score": experience_score,
-        "education_score": education_score,
-        "breakdown_notes": breakdown["breakdown_notes"],
-        "is_priority": application.is_priority,
-        "cv_score_id": cv_score.id,
-    }
-
-
-def _render_email_template(template_text, context):
-    return Template(template_text).render(Context(context))
-
-
-def _create_job_posting_for_hiring_request(hiring_request):
-    existing_posting = hiring_request.job_postings.first()
-    if existing_posting:
-        return existing_posting
-
-    job_description = (
-        f"{hiring_request.reason}\n\n"
-        f"Seniority: {hiring_request.seniority}\n"
-        f"Required experience: {hiring_request.required_experience}\n"
-        f"Required qualifications: {hiring_request.required_qualifications}"
-    )
-
-    return JobPosting.objects.create(
-        hiring_request=hiring_request,
-        department=hiring_request.department,
-        job_title=hiring_request.request_title,
-        job_description=job_description,
-        required_skills=hiring_request.required_qualifications,
-        required_experience=hiring_request.required_experience,
-        closing_date=None,
-        cv_score_threshold=70,
-        status=JobPosting.JobStatus.DRAFT,
-    )
 
 
 @api_view(["GET"])
@@ -439,7 +312,7 @@ def hiring_request_hr_action(request, pk):
 
     status = request.data.get("status")
     rejection_reason = request.data.get("rejection_reason", "").strip()
-    create_job_posting = _normalize_bool(
+    create_job_posting = normalize_bool(
         request.data.get("create_job_posting", False))
 
     allowed_statuses = [
@@ -468,7 +341,7 @@ def hiring_request_hr_action(request, pk):
     )
 
     if status == HiringRequest.RequestStatus.APPROVED and create_job_posting:
-        job_posting = _create_job_posting_for_hiring_request(hiring_request)
+        job_posting = create_job_posting_for_hiring_request(hiring_request)
         payload = HiringRequesDetailSerializer(hiring_request).data
         payload["job_posting_created"] = True
         payload["job_posting_id"] = job_posting.id
@@ -609,7 +482,7 @@ def job_posting_status_change(request, pk):
 def run_cv_scoring_detail(request, application_id):
     application = get_object_or_404(Application.objects.select_related(
         "candidate", "job_posting"), id=application_id)
-    result = _score_application(application)
+    result = score_application(application)
     return Response(CVScoreBreakdownSerializer(CVScore.objects.get(application=application)).data | {"is_priority": result["is_priority"]}, status=200)
 
 
@@ -621,7 +494,7 @@ def rescore_job_applications_bulk(request, job_id):
         job_posting=job).select_related("candidate", "job_posting")
     results = []
     for application in applications:
-        results.append(_score_application(application))
+        results.append(score_application(application))
     return Response({"job_id": job.id, "scored_count": len(results), "results": results}, status=200)
 
 
@@ -840,8 +713,8 @@ def preview_candidate_email_view(request):
         "email": candidate.email,
         "phone": candidate.phone_number or "",
     }
-    rendered_subject = _render_email_template(template.subject, context)
-    rendered_body = _render_email_template(template.body, context)
+    rendered_subject = render_email_template(template.subject, context)
+    rendered_body = render_email_template(template.body, context)
     return Response({"subject": rendered_subject, "body": rendered_body}, status=200)
 
 
@@ -887,8 +760,8 @@ def send_candidate_email_view(request):
                 "email": candidate.email,
                 "phone": candidate.phone_number or "",
             }
-            subject = _render_email_template(template.subject, context)
-            body = _render_email_template(template.body, context)
+            subject = render_email_template(template.subject, context)
+            body = render_email_template(template.body, context)
         else:
             subject = payload.get("subject") or ""
             body = payload.get("body") or ""
