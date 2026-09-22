@@ -1,5 +1,6 @@
+from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 
@@ -229,6 +230,74 @@ class HiringRequestApprovalJobPostingTests(TestCase):
         self.assertIn("GitHub", candidate.candidate_skills)
         self.assertIn("https://github.com/design", candidate.candidate_skills)
 
+    def test_public_job_apply_scores_application_immediately(self):
+        job = JobPosting.objects.create(
+            department=self.department,
+            job_title="Data Analyst",
+            job_description="Analyze business data and build dashboards.",
+            required_skills="SQL, Python, Tableau",
+            required_experience="3+ years",
+            status=JobPosting.JobStatus.PUBLISHED,
+            cv_score_threshold=70,
+        )
+
+        payload = {
+            "full_name": "Auto Score Candidate",
+            "email": "autoscore@example.com",
+            "phone": "111222333",
+            "cv": SimpleUploadedFile("cv.pdf", b"pdf-content", content_type="application/pdf"),
+        }
+
+        response = self.client.post(
+            reverse("public_job_apply", kwargs={"job_id": job.id}),
+            payload,
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        application = Application.objects.get(
+            job_posting=job,
+            candidate__email="autoscore@example.com",
+        )
+        self.assertGreater(application.ats_score, 0)
+        self.assertIn("overall_score", application.score_reasons)
+
+    def test_score_application_extracts_skills_from_uploaded_cv_text(self):
+        job = JobPosting.objects.create(
+            department=self.department,
+            job_title="Backend Engineer",
+            job_description="Build APIs and backend systems.",
+            required_skills="Python, Django, PostgreSQL",
+            required_experience="3+ years",
+            status=JobPosting.JobStatus.PUBLISHED,
+            cv_score_threshold=70,
+        )
+        candidate = Candidate.objects.create(
+            candidate_name="CV Skill Match",
+            email="skillsfromcv@example.com",
+            phone_number="332211",
+            location="Lagos",
+            about="Software engineer focused on backend systems.",
+        )
+        application = Application.objects.create(
+            candidate=candidate,
+            job_posting=job,
+            attached_cv=SimpleUploadedFile(
+                "candidate_cv.txt",
+                b"Python, Django, PostgreSQL, REST APIs, unit testing and CI/CD",
+                content_type="text/plain",
+            ),
+            stage=Application.Stage.NEW,
+            ats_score=0,
+        )
+
+        result = __import__("recruitment.services", fromlist=[
+                            "score_application"]).score_application(application)
+
+        self.assertGreater(result["skills_score"], 50)
+        self.assertGreater(result["overall_score"], 60)
+        self.assertGreater(application.ats_score, 60)
+
     def test_job_posting_application_list_and_detail_endpoints(self):
         self.hiring_request.status = HiringRequest.RequestStatus.APPROVED
         self.hiring_request.save()
@@ -381,6 +450,29 @@ class RecruitmentATSAndPipelineTests(TestCase):
         self.assertEqual(preview.status_code, 200)
         self.assertIn("Candidate Alpha", preview.json()["subject"])
         self.assertIn("Senior Python Engineer", preview.json()["body"])
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_stage_update_sends_candidate_email_for_rejection(self):
+        client = APIClient()
+        client.force_authenticate(user=self.hr)
+
+        response = client.patch(
+            reverse("update_application_stage_view", kwargs={
+                    "application_id": self.application.id}),
+            {"new_stage": "REJECTED"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            CandidateEmailLog.objects.filter(
+                candidate=self.candidate,
+                job_posting=self.job,
+                status="SUCCESS",
+            ).exists()
+        )
+        self.assertGreater(len(mail.outbox), 0)
+        self.assertIn("application", mail.outbox[0].subject.lower())
 
     def test_email_suite_alias_contract(self):
         client = APIClient()

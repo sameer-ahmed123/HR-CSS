@@ -50,6 +50,10 @@ export const recruitmentApi = {
     client.get<JobPostingApplication[]>(`/recruitment/job-postings/${jobId}/applications/`),
   getJobPostingApplication: (jobId: number, applicationId: number) =>
     client.get<JobPostingApplicationDetail>(`/recruitment/job-postings/${jobId}/applications/${applicationId}/`),
+  rescoreApplication: (applicationId: number) =>
+    client.post(`/recruitment/applications/${applicationId}/score/`),
+  updateApplicationStage: (applicationId: number, newStage: string) =>
+    client.patch<JobPostingApplicationDetail>(`/recruitment/applications/${applicationId}/stage/`, { new_stage: newStage }),
   updateJobPosting: (id: number, data: Partial<JobPostingInput>) =>
     client.patch<JobPosting>(`/recruitment/job-postings/${id}/`, data),
   deleteJobPosting: (id: number) =>

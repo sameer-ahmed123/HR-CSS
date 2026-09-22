@@ -24,10 +24,25 @@ import {
   TableRow,
 } from "../components/ui/table";
 import type {
+  ApplicationStage,
   JobPosting,
   JobPostingApplication,
   JobPostingApplicationDetail,
 } from "../types";
+
+const applicationStageOptions: Array<{
+  value: ApplicationStage;
+  label: string;
+}> = [
+  { value: "NEW", label: "New" },
+  { value: "REVIEWED", label: "Reviewed" },
+  { value: "SHORTLISTED", label: "Shortlisted" },
+  { value: "TEST_SENT", label: "Test sent" },
+  { value: "INTERVIEW", label: "Interview" },
+  { value: "OFFER", label: "Offer" },
+  { value: "HIRED", label: "Hired" },
+  { value: "REJECTED", label: "Rejected" },
+];
 
 export default function JobPostingDetailPage() {
   const { jobId, applicationId } = useParams();
@@ -38,6 +53,9 @@ export default function JobPostingDetailPage() {
     useState<JobPostingApplicationDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingApplication, setLoadingApplication] = useState(false);
+  const [rescoring, setRescoring] = useState(false);
+  const [updatingStage, setUpdatingStage] = useState(false);
+  const [stageDraft, setStageDraft] = useState<ApplicationStage | "">("");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -61,6 +79,7 @@ export default function JobPostingDetailPage() {
               Number(applicationId),
             );
           setSelectedApplication(appData);
+          setStageDraft(appData.stage);
         }
       } catch {
         setError("We could not load the job posting and applicant list.");
@@ -71,6 +90,12 @@ export default function JobPostingDetailPage() {
 
     void load();
   }, [jobId, applicationId]);
+
+  useEffect(() => {
+    if (selectedApplication) {
+      setStageDraft(selectedApplication.stage);
+    }
+  }, [selectedApplication]);
 
   const selectedCvUrl = useMemo(() => {
     if (!selectedApplication?.attached_cv) return null;
@@ -99,6 +124,51 @@ export default function JobPostingDetailPage() {
       setError("We could not load this application.");
     } finally {
       setLoadingApplication(false);
+    }
+  }
+
+  async function handleRescoreApplication() {
+    if (!selectedApplication || !jobId) return;
+
+    try {
+      setRescoring(true);
+      await recruitmentApi.rescoreApplication(selectedApplication.id);
+      const { data } = await recruitmentApi.getJobPostingApplication(
+        Number(jobId),
+        selectedApplication.id,
+      );
+      setSelectedApplication(data);
+
+      const { data: refreshedList } =
+        await recruitmentApi.listJobPostingApplications(Number(jobId));
+      setApplications(refreshedList);
+      setError("");
+    } catch {
+      setError("We could not rescore this application.");
+    } finally {
+      setRescoring(false);
+    }
+  }
+
+  async function handleUpdateApplicationStage() {
+    if (!selectedApplication || !jobId || !stageDraft) return;
+
+    try {
+      setUpdatingStage(true);
+      const { data } = await recruitmentApi.updateApplicationStage(
+        selectedApplication.id,
+        stageDraft,
+      );
+      setSelectedApplication(data);
+
+      const { data: refreshedList } =
+        await recruitmentApi.listJobPostingApplications(Number(jobId));
+      setApplications(refreshedList);
+      setError("");
+    } catch {
+      setError("We could not update this application stage.");
+    } finally {
+      setUpdatingStage(false);
     }
   }
 
@@ -334,6 +404,52 @@ export default function JobPostingDetailPage() {
               </div>
 
               <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-5">
+                <Button
+                  type="button"
+                  onClick={() => void handleRescoreApplication()}
+                  disabled={rescoring}
+                  className="w-full"
+                >
+                  {rescoring ? "Rescoring..." : "Re-score application"}
+                </Button>
+
+                <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-mist/60">
+                    Update stage
+                  </label>
+                  <div className="flex gap-2">
+                    <select
+                      value={stageDraft || selectedApplication.stage}
+                      onChange={(event) =>
+                        setStageDraft(event.target.value as ApplicationStage)
+                      }
+                      className="w-full rounded-md border border-white/15 bg-ink px-3 py-2 text-sm text-mist outline-none ring-0 transition focus:border-coral"
+                    >
+                      {applicationStageOptions.map((option) => (
+                        <option
+                          key={option.value}
+                          value={option.value}
+                          className="bg-ink text-mist"
+                        >
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => void handleUpdateApplicationStage()}
+                      disabled={
+                        updatingStage ||
+                        stageDraft === selectedApplication.stage
+                      }
+                      className="border-white/15 bg-white/5 text-mist hover:bg-white/10"
+                    >
+                      {updatingStage ? "Saving..." : "Update"}
+                    </Button>
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-between text-sm text-mist/70">
                   <span>ATS score</span>
                   <span className="text-xl font-bold text-coral">

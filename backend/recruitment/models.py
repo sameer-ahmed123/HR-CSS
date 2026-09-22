@@ -203,9 +203,11 @@ class CandidateNote(TimeStampedModel):
 class EmailTemplate(TimeStampedModel):
     class TemplateType(models.TextChoices):
         REJECTION = 'REJECTION', 'Rejection'
+        SHORTLISTED = 'SHORTLISTED', 'Shortlisted'
         TEST_INVITATION = 'TEST_INVITATION', 'Test Invitation'
         INTERVIEW_INVITATION = 'INTERVIEW_INVITATION', 'Interview Invitation'
         OFFER = 'OFFER', 'Offer'
+        HIRED = 'HIRED', 'Hired'
         CUSTOM = 'CUSTOM', 'Custom'
 
     name = models.CharField(max_length=200)

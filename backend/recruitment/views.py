@@ -37,6 +37,7 @@ from recruitment.services import (
     normalize_bool,
     render_email_template,
     score_application,
+    send_stage_email,
 )
 from recruitment.models import (
     Application,
@@ -260,6 +261,7 @@ def public_job_apply(request, job_id):
         score_reasons={},
         is_priority=False,
     )
+    score_application(application)
 
     subject = f"Thank you for applying for {job.job_title}"
     message = (
@@ -556,6 +558,9 @@ def update_application_stage_view(request, application_id):
         changed_by=request.user,
     )
 
+    if old_stage != new_stage:
+        send_stage_email(application, new_stage, sent_by=request.user)
+
     serializer = ApplicationDetailSerializer(application)
     return Response(serializer.data, status=200)
 
@@ -610,6 +615,8 @@ def bulk_update_stage_view(request):
             new_stage=new_stage,
             changed_by=request.user,
         )
+        if old_stage != new_stage:
+            send_stage_email(application, new_stage, sent_by=request.user)
 
     return Response({"updated_count": applications.count(), "new_stage": new_stage}, status=200)
 
