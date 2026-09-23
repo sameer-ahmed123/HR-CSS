@@ -231,7 +231,7 @@ export default function PeoplePage() {
                 </TableHeader>
                 <TableBody>
                   {filteredPeople.map((person) => (
-                    <TableRow key={person.id}>
+                    <TableRow key={person.id} className="cursor-pointer">
                       <TableCell>
                         <div className="min-w-48">
                           <p className="font-semibold text-ink">
