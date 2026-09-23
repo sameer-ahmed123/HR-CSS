@@ -8,6 +8,7 @@ urlpatterns = [
     path("api/v1/auth/", include("authentication.urls")),
     path("api/v1/organization/", include("organization.urls")),
     path("api/v1/recruitment/", include("recruitment.urls")),
+    path("api/v1/documents/",include("documents.urls")),
 ]
 
 if settings.DEBUG:
