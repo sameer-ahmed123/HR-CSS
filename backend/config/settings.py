@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     "organization",
     'recruitment',
     'documents',
+    'policies',
 ]
 
 MIDDLEWARE = [
