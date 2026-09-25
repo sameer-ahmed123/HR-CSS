@@ -1,12 +1,26 @@
-from datetime import timedelta, timezone
+from datetime import timedelta
 
-from django.shortcuts import get_object_or_404, render
+from django.core.files.base import ContentFile
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from common.permissions import HasRole, IsAdminOrHR
-from documents.models import DocumentTypeConfig, DocumentTemplate, DocumentRequest
-from documents.serializers import DocumentTypeSerializer, DocumentTemplateSerializer, DocumentRequestSerializer, DocumentRequestDetailSerializer
+from rest_framework.response import Response
+
+from common.permissions import IsAdminOrHR
+from documents.models import DocumentRequest, DocumentTemplate, DocumentTypeConfig
+from documents.serializers import (
+    DocumentRequestDetailSerializer,
+    DocumentRequestSerializer,
+    DocumentTemplateSerializer,
+    DocumentTypeSerializer,
+)
+from documents.services import (
+    generate_pdf_from_html,
+    generate_reference_number,
+    get_document_context,
+    render_template_to_html,
+)
 # Create your views here.
 
 
@@ -206,3 +220,83 @@ def document_request_detail_view(request, pk):
 
             serializer = DocumentRequestDetailSerializer(document_request)
             return Response(serializer.data, status=200)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsAdminOrHR])
+def preview_document_letter_view(request, pk):
+    document_request = get_object_or_404(
+        DocumentRequest.objects.select_related(
+            "requested_by", "document_type"),
+        id=pk,
+    )
+    template = get_object_or_404(
+        DocumentTemplate.objects.select_related("document_type"),
+        document_type=document_request.document_type,
+    )
+
+    rendered_html = render_template_to_html(
+        template.body_content,
+        get_document_context(document_request),
+    )
+    return Response({"html": rendered_html, "title": template.title}, status=200)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsAdminOrHR])
+def generate_and_issue_document_view(request, pk):
+    document_request = get_object_or_404(
+        DocumentRequest.objects.select_related(
+            "requested_by", "document_type", "assigned_hr"),
+        id=pk,
+    )
+    template = get_object_or_404(
+        DocumentTemplate.objects.select_related("document_type"),
+        document_type=document_request.document_type,
+    )
+
+    uploaded_file = request.FILES.get(
+        "generated_file") or request.FILES.get("manual_file")
+
+    if uploaded_file:
+        document_request.generated_file.save(
+            uploaded_file.name, uploaded_file, save=False)
+        document_request.manual_upload = True
+        document_request.assigned_hr = request.user
+        document_request.status = DocumentRequest.RequestChoice.READY
+        if not document_request.reference_number:
+            document_request.reference_number = generate_reference_number(
+                document_request)
+        document_request.file_version = (
+            document_request.file_version or 0) + 1
+        document_request.save()
+        return Response(DocumentRequestDetailSerializer(document_request).data, status=200)
+
+    context_data = get_document_context(document_request)
+    rendered_html = render_template_to_html(
+        template.body_content,
+        context_data,
+    )
+    pdf_buffer = generate_pdf_from_html(
+        rendered_html,
+        include_letterhead=bool(template.include_letterhead),
+    )
+
+    if not document_request.reference_number:
+        document_request.reference_number = generate_reference_number(
+            document_request)
+
+    pdf_name = f"{document_request.reference_number}.pdf"
+    document_request.generated_file.save(
+        pdf_name, ContentFile(pdf_buffer.getvalue()), save=False)
+
+    document_request.manual_upload = False
+    document_request.file_version = (document_request.file_version or 0) + 1
+    if not document_request.assigned_hr_id:
+        document_request.assigned_hr = request.user
+
+    document_request.status = DocumentRequest.RequestChoice.READY
+    document_request.save()
+
+    serializer = DocumentRequestDetailSerializer(document_request)
+    return Response(serializer.data, status=200)

@@ -49,6 +49,7 @@ class CustomUser(AbstractUser, TimeStampedModel):
     failed_login_attempts = models.PositiveSmallIntegerField(default=0)
     is_locked = models.BooleanField(default=False)
     locked_at = models.DateTimeField(null=True, blank=True)
+    salary = models.CharField(max_length=500, null=True, blank=True)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []

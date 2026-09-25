@@ -60,6 +60,7 @@ class DocumentRequest(models.Model):
         DELIVERED = "DELIVERED", "delivered"
         REJECTED = "REJECTED", "rejected"
         CANCELLED = "CANCELLED", "cancelled"
+
     requested_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="document_request")
     document_type = models.ForeignKey(
@@ -72,10 +73,16 @@ class DocumentRequest(models.Model):
     rejection_reason = models.CharField(max_length=500, null=True, blank=True)
     assigned_hr = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True, related_name="assigned_document_requests")
+    reference_number = models.CharField(
+        max_length=80, blank=True, null=True, unique=True,
+        help_text="Persistent unique reference number for the issued document."
+    )
+    file_version = models.PositiveIntegerField(default=1)
+    manual_upload = models.BooleanField(default=False)
     generated_file = models.FileField(
         null=True, blank=True, upload_to="generated_documents/")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.requested_by.username} requested {self.document_type.name} by {self.needed_by}"
+        return f"{self.requested_by.email} requested {self.document_type.name} by {self.needed_by}"

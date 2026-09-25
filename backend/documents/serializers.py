@@ -58,6 +58,9 @@ class DocumentRequestSerializer(serializers.ModelSerializer):
             'rejection_reason',
             'assigned_hr',
             'assigned_hr_email',
+            'reference_number',
+            'file_version',
+            'manual_upload',
             'generated_file',
             'created_at',
             'updated_at'
@@ -68,9 +71,11 @@ class DocumentRequestSerializer(serializers.ModelSerializer):
             'status',
             'expected_completion_date',
             'rejection_reason',
+            'reference_number',
+            'file_version',
+            'manual_upload',
             'generated_file'
         ]
-
 
 
 class DocumentRequestDetailSerializer(serializers.ModelSerializer):
@@ -102,6 +107,9 @@ class DocumentRequestDetailSerializer(serializers.ModelSerializer):
             'rejection_reason',
             'assigned_hr',
             'assigned_hr_email',
+            'reference_number',
+            'file_version',
+            'manual_upload',
             'generated_file',
             'created_at',
             'updated_at'
@@ -112,4 +120,7 @@ class DocumentRequestDetailSerializer(serializers.ModelSerializer):
             'assigned_hr',
             'status',
             'rejection_reason',
+            'reference_number',
+            'file_version',
+            'manual_upload',
         ]

@@ -12,4 +12,8 @@ urlpatterns = [
          name="document_request_list_create"),
     path("request/<int:pk>/", document_request_detail_view,
          name="document_request_detail"),
+    path("request/<int:pk>/preview/", preview_document_letter_view,
+         name="document_request_preview"),
+    path("request/<int:pk>/issue/", generate_and_issue_document_view,
+         name="document_request_issue"),
 ]
