@@ -70,3 +70,46 @@ class DocumentRequestSerializer(serializers.ModelSerializer):
             'rejection_reason',
             'generated_file'
         ]
+
+
+
+class DocumentRequestDetailSerializer(serializers.ModelSerializer):
+    requested_by_email = serializers.CharField(
+        source='requested_by.email',
+        read_only=True
+    )
+    assigned_hr_email = serializers.CharField(
+        source='assigned_hr.email',
+        read_only=True
+    )
+    document_type_name = serializers.CharField(
+        source='document_type.name',
+        read_only=True
+    )
+
+    class Meta:
+        model = DocumentRequest
+        fields = [
+            'id',
+            'requested_by',
+            'requested_by_email',
+            'document_type',
+            'document_type_name',
+            'purpose',
+            'needed_by',
+            'expected_completion_date',
+            'status',
+            'rejection_reason',
+            'assigned_hr',
+            'assigned_hr_email',
+            'generated_file',
+            'created_at',
+            'updated_at'
+        ]
+        read_only_fields = [
+            'requested_by',
+            'expected_completion_date',
+            'assigned_hr',
+            'status',
+            'rejection_reason',
+        ]

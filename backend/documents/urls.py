@@ -10,5 +10,6 @@ urlpatterns = [
          name="doc_template_detail"),
     path('request/', document_request_list_create_view,
          name="document_request_list_create"),
-
+    path("request/<int:pk>/", document_request_detail_view,
+         name="document_request_detail"),
 ]

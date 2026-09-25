@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from common.permissions import HasRole, IsAdminOrHR
 from documents.models import DocumentTypeConfig, DocumentTemplate, DocumentRequest
-from documents.serializers import DocumentTypeSerializer, DocumentTemplateSerializer, DocumentRequestSerializer
+from documents.serializers import DocumentTypeSerializer, DocumentTemplateSerializer, DocumentRequestSerializer, DocumentRequestDetailSerializer
 # Create your views here.
 
 
@@ -139,3 +139,70 @@ def document_request_list_create_view(request):
             )
             return Response(serializer.data, status=201)
         return Response(serializer.errors, status=400)
+
+
+@api_view(["GET", "PUT", "PATCH", "DELETE"])
+@permission_classes([IsAuthenticated])
+def document_request_detail_view(request, pk):
+    if request.user.role in ["ADMIN", "HR"]:
+        document_request = get_object_or_404(DocumentRequest.objects.select_related(
+            "requested_by", "document_type", "assigned_hr"), id=pk,)
+    else:
+        document_request = get_object_or_404(DocumentRequest.objects.select_related(
+            "requested_by", "document_type", "assigned_hr"), id=pk, requested_by=request.user)
+    if request.method == "GET":
+        serializer = DocumentRequestDetailSerializer(document_request)
+        return Response(serializer.data, status=200)
+
+    if request.method == "DELETE":
+        if request.user.role not in ["ADMIN", "HR"]:
+            if document_request.status != DocumentRequest.RequestChoice.PENDING:
+                return Response(
+                    {"error": "Cannot delete/cancel requests that are already in progress or completed."},
+                    status=400
+                )
+        document_request.delete()
+        return Response(status=204)
+
+    if request.method in ["PUT", "PATCH"]:
+        is_hr = request.user.role in ["HR", "ADMIN"]
+
+        if not is_hr:
+            if document_request.status != DocumentRequest.RequestChoice.PENDING:
+                return Response({"error": "Cannot edit requests that are already in progress or completed."}, status=400)
+            serializer = DocumentRequestDetailSerializer(
+                document_request, data=request.data, partial=(request.method == "PATCH"))
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=200)
+            return Response(serializer.errors, status=400)
+        else:
+            action = request.data.get("action")  # Optional action indicator
+
+            if action == "pickup" or request.data.get("status") == DocumentRequest.RequestChoice.IN_PROGRESS:
+                document_request.assigned_hr = request.user
+                document_request.status = DocumentRequest.RequestChoice.IN_PROGRESS
+                document_request.save()
+
+            elif action == "reject" or request.data.get("status") == DocumentRequest.RequestChoice.REJECTED:
+                rejection_reason = request.data.get("rejection_reason")
+                if not rejection_reason:
+                    return Response({"error": "Rejection reason is required when rejecting a request."}, status=400)
+
+                document_request.status = DocumentRequest.RequestChoice.REJECTED
+                document_request.rejection_reason = rejection_reason
+                document_request.save()
+
+            else:
+                serializer = DocumentRequestDetailSerializer(
+                    document_request,
+                    data=request.data,
+                    partial=True
+                )
+                if serializer.is_valid():
+                    serializer.save()
+                    return Response(serializer.data, status=200)
+                return Response(serializer.errors, status=400)
+
+            serializer = DocumentRequestDetailSerializer(document_request)
+            return Response(serializer.data, status=200)
