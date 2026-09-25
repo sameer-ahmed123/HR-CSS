@@ -191,14 +191,21 @@ def document_request_detail_view(request, pk):
                 return Response(serializer.data, status=200)
             return Response(serializer.errors, status=400)
         else:
-            action = request.data.get("action")  # Optional action indicator
+            action = request.data.get("action")
+            requested_status = request.data.get("status")
 
-            if action == "pickup" or request.data.get("status") == DocumentRequest.RequestChoice.IN_PROGRESS:
+            if action == "pickup" or requested_status == DocumentRequest.RequestChoice.IN_PROGRESS:
                 document_request.assigned_hr = request.user
                 document_request.status = DocumentRequest.RequestChoice.IN_PROGRESS
                 document_request.save()
 
-            elif action == "reject" or request.data.get("status") == DocumentRequest.RequestChoice.REJECTED:
+            elif action == "approve" or requested_status in [DocumentRequest.RequestChoice.READY, "APPROVED"]:
+                document_request.assigned_hr = request.user
+                document_request.status = DocumentRequest.RequestChoice.READY
+                document_request.rejection_reason = ""
+                document_request.save()
+
+            elif action == "reject" or requested_status == DocumentRequest.RequestChoice.REJECTED:
                 rejection_reason = request.data.get("rejection_reason")
                 if not rejection_reason:
                     return Response({"error": "Rejection reason is required when rejecting a request."}, status=400)

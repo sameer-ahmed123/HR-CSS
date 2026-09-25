@@ -118,8 +118,6 @@ class DocumentRequestDetailSerializer(serializers.ModelSerializer):
             'requested_by',
             'expected_completion_date',
             'assigned_hr',
-            'status',
-            'rejection_reason',
             'reference_number',
             'file_version',
             'manual_upload',

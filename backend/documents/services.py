@@ -26,8 +26,10 @@ def get_document_context(document_request):
         employee_name = user.get_full_name() or getattr(
             user, "username", None) or getattr(user, "email", "N/A") or "N/A"
 
-    designation = getattr(user, "role",
-                          None) or getattr(user, "designation", None)
+    designation = (
+        getattr(user, "current_designation", None)
+        or getattr(user, "designation", None)
+    )
     if isinstance(designation, str):
         designation_value = designation
     elif designation is not None and hasattr(designation, "title"):

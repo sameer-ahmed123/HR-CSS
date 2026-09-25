@@ -6,10 +6,12 @@ import {
   LogOut,
   Menu,
   Settings,
+  FileText,
   ShieldCheck,
   Users,
   UserRound,
   X,
+  BadgeCheck,
 } from "lucide-react";
 import { useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
@@ -46,6 +48,18 @@ const navigation: {
     path: "/people",
     icon: Users,
     roles: ["ADMIN", "HR", "TEAM_LEAD"],
+  },
+  {
+    label: "Documents",
+    path: "/documents",
+    icon: FileText,
+    roles: ["ADMIN", "HR", "TEAM_LEAD", "EMPLOYEE", "FINANCE"],
+  },
+  {
+    label: "Policies",
+    path: "/policies",
+    icon: BadgeCheck,
+    roles: ["ADMIN", "HR", "TEAM_LEAD", "EMPLOYEE", "FINANCE"],
   },
   {
     label: "Organization",

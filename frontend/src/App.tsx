@@ -21,6 +21,8 @@ import JobPostingDetailPage from "./pages/JobPostingDetailPage";
 import CareersPage from "./pages/CareersPage";
 import CareerDetailPage from "./pages/CareerDetailPage";
 import ApplyJobPage from "./pages/ApplyJobPage";
+import DocumentsPage from "./pages/DocumentsPage";
+import PoliciesPage from "./pages/PoliciesPage";
 
 export default function App() {
   return (
@@ -41,6 +43,8 @@ export default function App() {
               <Route index element={<DashboardPage />} />
               <Route path="home" element={<DashboardPage />} />
               <Route path="profile" element={<ProfilePage />} />
+              <Route path="documents" element={<DocumentsPage />} />
+              <Route path="policies" element={<PoliciesPage />} />
               <Route path="people" element={<PeoplePage />} />
               <Route element={<ProtectedRoute roles={["ADMIN", "HR"]} />}>
                 <Route path="access-control" element={<AccessControlPage />} />
